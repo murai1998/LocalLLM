@@ -1,0 +1,23 @@
+services:
+  sage:
+    build: .
+    container_name: localllm-sage
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+      - "8501:8501"
+    volumes:
+      - ./models:/app/models
+      - ./hf_token.txt:/app/hf_token.txt:ro
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+    mem_limit: 16g
+    mem_reservation: 8g
+    shm_size: 2g
+
+    # Extra safety for large models
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      stack: 67108864

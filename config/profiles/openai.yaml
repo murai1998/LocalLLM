@@ -1,0 +1,6 @@
+# Example profile for commercial OpenAI API (copy values into config/default.yaml or use env overrides).
+llm:
+  provider: openai
+  base_url: https://api.openai.com/v1
+  model: gpt-4o
+  api_key: null  # set OPENAI_API_KEY env instead

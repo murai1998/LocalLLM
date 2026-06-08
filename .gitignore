@@ -1,0 +1,34 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+.env
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets and local tokens
+.env.local
+
+# Downloaded models
+models/
+*.gguf
+
+# Streamlit / app artifacts
+.streamlit/
+uploads/
+outputs/
+*.wav.tmp
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+terminals/

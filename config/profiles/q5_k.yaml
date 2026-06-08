@@ -1,0 +1,3 @@
+# 5-bit Gemma — ~8 GB VRAM for weights; pair with Whisper on GPU (see docs/INTEGRATION_PLAN.md)
+model:
+  quantization: q5_k

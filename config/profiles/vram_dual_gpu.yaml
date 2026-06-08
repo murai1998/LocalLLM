@@ -1,0 +1,5 @@
+# RTX 16 GB: Gemma Q5 on GPU + Whisper float16 on GPU (tight; see INTEGRATION_PLAN)
+model:
+  quantization: q5_k
+llama_server:
+  n_gpu_layers: 999

@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "localllm"
+version = "0.2.0"
+description = "Local Gemma 4 12B apps via llama.cpp (Q6_K GGUF)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "pyyaml>=6.0",
+    "huggingface-hub>=0.24",
+    "httpx>=0.27",
+    "pillow>=10.0",
+    "pymupdf>=1.24",
+    "python-docx>=1.1",
+    "librosa>=0.10",
+    "soundfile>=0.12",
+    "langgraph>=0.2",
+    "langchain-core>=0.3",
+    "streamlit>=1.32",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "piper-tts>=1.2",
+    "imageio-ffmpeg>=0.5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+localllm-chat = "apps.cli_chat:main"
+localllm-streamlit = "apps.streamlit_launcher:launch"
+localllm-agent = "apps.agent_cli:main"
+localllm-ocr = "apps.ocr_bot:main"
+localllm-stt = "apps.stt_batch:main"
+localllm-download = "scripts.download_model:main"
+localllm-serve = "apps.serve:main"
+localllm-translate-streamlit = "apps.translate_streamlit_launcher:launch"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["localllm*", "apps*", "scripts*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

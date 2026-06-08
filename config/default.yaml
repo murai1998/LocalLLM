@@ -1,0 +1,67 @@
+model:
+  gguf_repo: unsloth/gemma-4-12b-it-GGUF
+  quantization: q6_k          # q6_k (default) | q5_k (5-bit, lower VRAM)
+  # gguf_file: ""             # optional override; leave empty to use quantization preset
+  mmproj_file: mmproj-F16.gguf
+  cache_dir: models
+
+service:
+  host: 127.0.0.1
+  port: 8090
+  max_concurrent_requests: 2
+  autostart_llama_server: true
+  startup_timeout_sec: 300
+
+llm:
+  provider: local
+  base_url: http://127.0.0.1:8090/v1
+  model: gemma-4-12b-it
+  timeout_sec: 600
+
+llama_server:
+  host: 127.0.0.1
+  port: 8080
+  context_size: 16384
+  # Set to 0 to use all layers on GPU (CUDA or Metal)
+  n_gpu_layers: 999
+  jinja: true
+  startup_timeout_sec: 300
+
+generation:
+  max_tokens: 4096
+  temperature: 0.7
+  top_p: 0.95
+  enable_thinking: true
+  stt_temperature: 0.1
+  stt_max_tokens: 2048
+
+ocr:
+  visual_detail: high
+  max_pages: 20
+
+stt:
+  sample_rate: 16000
+  chunk_seconds: 28
+  overlap_seconds: 2
+  max_chunk_seconds: 30
+
+# whisper:   # disabled — Gemma unified audio only
+#   base_url: http://127.0.0.1:8091
+#   timeout_sec: 3600
+
+translate:
+  source_language: null   # null = auto-detect via Gemma audio
+  target_language: es
+  max_tokens: 1024
+  pipeline: split         # split = ASR then translate (best quality) | unified = one Gemma pass
+  live:                   # Phase 2 — VAD chunking (2–4 s windows)
+    min_chunk_seconds: 2.0
+    max_chunk_seconds: 4.0
+    overlap_seconds: 0.5
+    frame_ms: 30
+    energy_threshold: 0.01
+
+tts:
+  engine: piper           # local offline TTS (piper-tts)
+  model_dir: models/piper
+  use_cuda: false

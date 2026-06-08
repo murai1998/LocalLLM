@@ -1,0 +1,5 @@
+# RTX 16 GB: Gemma Q6 on GPU + Whisper int8 on CPU (safer split)
+model:
+  quantization: q6_k
+llama_server:
+  n_gpu_layers: 999
