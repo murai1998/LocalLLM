@@ -108,9 +108,9 @@ class SttConfig(BaseSettings):
 class TranslateLiveConfig(BaseSettings):
     """Phase 2 — VAD chunking for semi-real-time translation."""
 
-    min_chunk_seconds: float = 2.0
-    max_chunk_seconds: float = 4.0
-    overlap_seconds: float = 0.5
+    min_chunk_seconds: float = 9.0
+    max_chunk_seconds: float = 10.0
+    overlap_seconds: float = 1.0
     frame_ms: int = 30
     energy_threshold: float = 0.01
 

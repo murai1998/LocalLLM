@@ -54,10 +54,10 @@ translate:
   target_language: es
   max_tokens: 1024
   pipeline: split         # split = ASR then translate (best quality) | unified = one Gemma pass
-  live:                   # Phase 2 — VAD chunking (2–4 s windows)
-    min_chunk_seconds: 2.0
-    max_chunk_seconds: 4.0
-    overlap_seconds: 0.5
+  live:                   # Phase 2 — fixed windows (Gemma needs ~9s+ of audio per call)
+    min_chunk_seconds: 9.0
+    max_chunk_seconds: 10.0
+    overlap_seconds: 1.0
     frame_ms: 30
     energy_threshold: 0.01
 

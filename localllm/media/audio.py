@@ -17,7 +17,9 @@ def load_mono_16k(path: Path, sample_rate: int = 16000) -> np.ndarray:
 
 def write_wav(path: Path, audio: np.ndarray, sample_rate: int = 16000) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    sf.write(path, audio, sample_rate)
+    clipped = np.clip(np.asarray(audio, dtype=np.float32), -1.0, 1.0)
+    pcm = (clipped * 32767.0).astype(np.int16)
+    sf.write(path, pcm, sample_rate, subtype="PCM_16")
     return path
 
 

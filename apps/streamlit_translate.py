@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import tempfile
 import time
+import uuid
 from pathlib import Path
 
 import streamlit as st
@@ -16,6 +17,7 @@ from localllm.pipelines.translate import (
     TONE_PRESETS,
     ToneId,
     TranslationResult,
+    retranslate_transcript,
     translate_audio,
 )
 from localllm.pipelines.translate_chunked import (
@@ -29,6 +31,9 @@ from localllm.tts import PIPER_AVAILABLE, synthesize_speech, voice_options_for_l
 from localllm.tts.sentence_queue import SentenceQueue
 
 SUPPORTED_EXTENSIONS = {"wav", "mp3", "m4a", "ogg", "flac", "webm"}
+LIVE_UPLOAD_KEY = "translate_live_upload"
+LIVE_MIC_KEY = "translate_live_mic"
+LIVE_STAGING_ROOT = Path(tempfile.gettempdir()) / "localllm" / "translate_live"
 LANGUAGE_OPTIONS = [("auto", "Auto-detect")] + [
     (code, label) for code, label in sorted(LANGUAGE_LABELS.items(), key=lambda item: item[1])
 ]
@@ -43,6 +48,13 @@ def init_translate_state() -> None:
         "translate_live_result": None,
         "recorded_audio": None,
         "recorded_audio_name": "recording.wav",
+        "live_chunk_audio": None,
+        "live_chunk_audio_name": None,
+        "live_chunk_path": None,
+        "live_recorded_audio": None,
+        "live_recorded_audio_name": "recording.wav",
+        "live_recorded_path": None,
+        "live_chunk_source": None,
         "tts_voice_id": None,
         "tts_spoken_sentence_count": 0,
         "live_auto_tts": True,
@@ -134,6 +146,33 @@ def _save_audio_temp(data: bytes, filename: str) -> Path:
         return Path(tmp.name)
 
 
+def _live_chunk_staging_dir() -> Path:
+    if "translate_live_session_id" not in st.session_state:
+        st.session_state.translate_live_session_id = uuid.uuid4().hex
+    path = LIVE_STAGING_ROOT / st.session_state.translate_live_session_id
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _persist_live_bytes(data: bytes, filename: str, *, source: str) -> Path:
+    safe_name = Path(filename).name or "audio.wav"
+    dest = _live_chunk_staging_dir() / safe_name
+    dest.write_bytes(data)
+    st.session_state.live_chunk_audio = data
+    st.session_state.live_chunk_audio_name = safe_name
+    st.session_state.live_chunk_path = str(dest)
+    st.session_state.live_chunk_source = source
+    return dest
+
+
+def _valid_audio_path(path: Path | None) -> Path | None:
+    if path is None or not path.is_file():
+        return None
+    if path.stat().st_size < 128:
+        return None
+    return path
+
+
 def _run_translation(
     data: bytes,
     filename: str,
@@ -218,15 +257,49 @@ def _render_timing_live(result: ChunkedTranslationResult) -> None:
         st.caption(f"Avg per chunk: **{avg:.2f}s** · Tone: **{TONE_PRESETS[result.tone]['label']}**")
 
 
-def _play_translation(voice_id: str | None) -> None:
+def _source_lang_for_retranslate(source_lang: str | None) -> str | None:
+    if source_lang is not None:
+        return source_lang
+    batch: TranslationResult | None = st.session_state.get("translate_result")
+    if batch is not None and batch.source_language and batch.source_language != "auto":
+        return batch.source_language
+    live: ChunkedTranslationResult | None = st.session_state.get("translate_live_result")
+    if live is not None and live.source_language and live.source_language != "auto":
+        return live.source_language
+    return None
+
+
+def _retranslate_existing(
+    *,
+    source_lang: str | None,
+    target_lang: str,
+    tone: ToneId,
+) -> bool:
+    transcript = st.session_state.get("transcript", "").strip()
+    if not transcript:
+        st.warning("Translate audio first to get a transcript.")
+        return False
+
+    result = retranslate_transcript(
+        transcript,
+        source_lang=_source_lang_for_retranslate(source_lang),
+        target_lang=target_lang,
+        tone=tone,
+        llm_client=get_translate_llm_client(),
+    )
+    _store_batch_result(result)
+    return True
+
+
+def _play_translation(voice_id: str | None) -> bool:
     translation = st.session_state.get("translation", "")
     target_lang = st.session_state.get("translate_target_lang", "es")
     if not translation:
         st.warning("Translate audio first.")
-        return
+        return False
     if not PIPER_AVAILABLE:
         st.error("Install Piper TTS: `pip install piper-tts`")
-        return
+        return False
 
     started = time.perf_counter()
     with st.spinner("Generating speech…"):
@@ -246,12 +319,90 @@ def _play_translation(voice_id: str | None) -> None:
     if live is not None:
         live.tts_elapsed_sec = elapsed
         st.session_state.translate_live_result = live
-    st.audio(audio_bytes, format="audio/wav")
+    return True
+
+
+def _uploaded_file_bytes(uploaded) -> bytes | None:
+    if uploaded is None:
+        return None
+    try:
+        data = uploaded.getvalue()
+        if data:
+            return data
+    except Exception:
+        pass
+    try:
+        if hasattr(uploaded, "seek"):
+            uploaded.seek(0)
+        data = uploaded.read()
+        if data:
+            return data
+    except Exception:
+        pass
+    return None
+
+
+def _stage_live_upload(uploaded) -> Path | None:
+    if uploaded is None:
+        return None
+    data = _uploaded_file_bytes(uploaded)
+    if not data:
+        return None
+    name = getattr(uploaded, "name", None) or "audio.wav"
+    return _persist_live_bytes(data, name, source="upload")
+
+
+def _on_live_upload_changed() -> None:
+    _stage_live_upload(st.session_state.get(LIVE_UPLOAD_KEY))
+
+
+def _stage_live_recording(audio_input) -> Path | None:
+    if audio_input is None:
+        return None
+    data = audio_input.getvalue()
+    if not data:
+        return None
+    recorded_path = _live_chunk_staging_dir() / "recording.wav"
+    recorded_path.write_bytes(data)
+    st.session_state.live_recorded_audio = data
+    st.session_state.live_recorded_audio_name = "recording.wav"
+    st.session_state.live_recorded_path = str(recorded_path)
+    st.session_state.live_chunk_source = "recording"
+    return recorded_path
+
+
+def _resolve_live_audio_path(*, at_run: bool = False) -> tuple[Path | None, str | None]:
+    """Resolve live audio from widget (at click) or staged disk path."""
+    uploaded = st.session_state.get(LIVE_UPLOAD_KEY)
+    if uploaded is not None:
+        staged = _stage_live_upload(uploaded)
+        if staged is not None:
+            return staged, "upload"
+
+    mic = st.session_state.get(LIVE_MIC_KEY)
+    if mic is not None:
+        staged = _stage_live_recording(mic)
+        if staged is not None:
+            return staged, "recording"
+
+    if at_run:
+        for path_key, source in (
+            ("live_chunk_path", "upload"),
+            ("live_recorded_path", "recording"),
+        ):
+            path = _valid_audio_path(
+                Path(st.session_state[path_key])
+                if st.session_state.get(path_key)
+                else None
+            )
+            if path is not None:
+                return path, source
+
+    return None, None
 
 
 def _run_live_chunked(
-    data: bytes,
-    filename: str,
+    audio_path: Path,
     *,
     source_lang: str | None,
     target_lang: str,
@@ -259,7 +410,6 @@ def _run_live_chunked(
     voice_id: str | None,
     auto_tts: bool,
 ) -> None:
-    tmp_path = _save_audio_temp(data, filename)
     progress = st.progress(0.0, text="Preparing VAD chunks…")
     status = st.empty()
     transcript_live = st.empty()
@@ -287,18 +437,28 @@ def _run_live_chunked(
 
     try:
         result = translate_audio_chunked(
-            tmp_path,
+            audio_path,
             source_lang=source_lang,
             target_lang=target_lang,
             tone=tone,
             llm_client=get_translate_llm_client(),
             on_progress=on_progress,
         )
-    finally:
-        tmp_path.unlink(missing_ok=True)
+    except Exception as exc:
+        progress.empty()
+        status.error(f"Live chunked translate failed: {exc}")
+        return
 
     _store_live_result(result)
     _reset_tts_queue()
+
+    if result.chunk_count == 0:
+        progress.empty()
+        status.error(
+            "No speech chunks were transcribed. "
+            "Check the file has audible audio and is a supported format (WAV, MP3, M4A, …)."
+        )
+        return
 
     if auto_tts and result.translation.strip() and PIPER_AVAILABLE:
         queue = _sentence_queue()
@@ -331,13 +491,18 @@ def run_translate_ui(
     st.subheader("Voice Translator")
     st.caption("Batch translate · Phase 2 live VAD chunks · Piper TTS")
 
-    tab_upload, tab_record, tab_live = st.tabs([
-        "Upload audio",
-        "Record voice",
-        "Live (chunked)",
-    ])
+    input_methods = ["Upload audio", "Record voice", "Live (chunked)"]
+    if "translate_input_method" not in st.session_state:
+        st.session_state.translate_input_method = input_methods[0]
+    input_method = st.radio(
+        "Input method",
+        input_methods,
+        horizontal=True,
+        label_visibility="collapsed",
+        key="translate_input_method",
+    )
 
-    with tab_upload:
+    if input_method == "Upload audio":
         uploaded = st.file_uploader(
             "Audio file",
             type=sorted(SUPPORTED_EXTENSIONS),
@@ -358,14 +523,12 @@ def run_translate_ui(
                 _store_batch_result(result)
                 st.rerun()
 
-    with tab_record:
+    elif input_method == "Record voice":
         st.markdown("Record, then click translate.")
         audio_input = st.audio_input("Microphone", key="translate_mic")
         if audio_input is not None:
             st.session_state.recorded_audio = audio_input.getvalue()
             st.session_state.recorded_audio_name = "recording.wav"
-        if st.session_state.recorded_audio:
-            st.audio(st.session_state.recorded_audio, format="audio/wav")
         if st.button("Translate recording", type="primary", key="translate_record_btn"):
             recorded = st.session_state.get("recorded_audio")
             if not recorded:
@@ -382,9 +545,12 @@ def run_translate_ui(
                 _store_batch_result(result)
                 st.rerun()
 
-    with tab_live:
+    else:
+        settings = get_settings()
+        live_cfg = settings.translate.live
         st.markdown(
-            "Phase 2: VAD splits audio into **2–4 s** chunks with overlap. "
+            f"Phase 2: VAD splits audio into **{live_cfg.min_chunk_seconds:.0f}–"
+            f"{live_cfg.max_chunk_seconds:.0f} s** chunks with overlap. "
             "Transcript and translation update per chunk; TTS speaks **completed sentences** only."
         )
         st.session_state.live_auto_tts = st.checkbox(
@@ -392,37 +558,31 @@ def run_translate_ui(
             value=st.session_state.live_auto_tts,
             key="live_auto_tts_cb",
         )
-        live_upload = st.file_uploader(
+        st.file_uploader(
             "Audio for live chunking",
             type=sorted(SUPPORTED_EXTENSIONS),
-            key="translate_live_upload",
+            key=LIVE_UPLOAD_KEY,
+            on_change=_on_live_upload_changed,
         )
-        live_mic = st.audio_input("Or record", key="translate_live_mic")
-        if live_mic is not None:
-            st.session_state.recorded_audio = live_mic.getvalue()
-            st.session_state.recorded_audio_name = "recording.wav"
+        st.audio_input("Or record", key=LIVE_MIC_KEY)
 
-        use_recorded = st.checkbox(
-            "Use microphone recording above",
-            value=bool(st.session_state.recorded_audio),
-            key="live_use_recording",
-        )
+        live_path, live_source = _resolve_live_audio_path()
+        if live_path is not None and live_source == "upload":
+            size_kb = live_path.stat().st_size // 1024
+            st.caption(
+                f"Ready: uploaded file **{st.session_state.get('live_chunk_audio_name', live_path.name)}** "
+                f"({size_kb} KB)"
+            )
+        elif live_path is not None and live_source == "recording":
+            st.caption("Ready: microphone recording")
 
         if st.button("Run live chunked translate", type="primary", key="translate_live_btn"):
-            data: bytes | None = None
-            name = "audio.wav"
-            if use_recorded and st.session_state.recorded_audio:
-                data = st.session_state.recorded_audio
-                name = st.session_state.recorded_audio_name
-            elif live_upload is not None:
-                data = live_upload.getvalue()
-                name = live_upload.name
-            if not data:
-                st.warning("Provide audio via upload or microphone.")
+            audio_path, source = _resolve_live_audio_path(at_run=True)
+            if audio_path is None:
+                st.warning("Upload an audio file or record from the microphone first.")
             else:
                 _run_live_chunked(
-                    data,
-                    name,
+                    audio_path,
                     source_lang=source_lang,
                     target_lang=target_lang,
                     tone=tone,
@@ -431,8 +591,24 @@ def run_translate_ui(
                 )
                 st.rerun()
 
-    if st.button("Play full translation", type="secondary", key="translate_play_btn"):
-        _play_translation(voice_id)
+    has_transcript = bool(st.session_state.get("transcript", "").strip())
+    action_cols = st.columns(2)
+    with action_cols[0]:
+        if st.button("Play full translation", type="secondary", key="translate_play_btn"):
+            if _play_translation(voice_id):
+                st.rerun()
+    with action_cols[1]:
+        if has_transcript and st.button(
+            "Re-translate with current settings",
+            type="secondary",
+            key="translate_retranslate_btn",
+        ):
+            if _retranslate_existing(
+                source_lang=source_lang,
+                target_lang=target_lang,
+                tone=tone,
+            ):
+                st.rerun()
 
     batch_result: TranslationResult | None = st.session_state.get("translate_result")
     live_result: ChunkedTranslationResult | None = st.session_state.get("translate_live_result")
@@ -463,4 +639,5 @@ def run_translate_ui(
         st.text_area("Translation", height=260, label_visibility="collapsed", key="translation")
 
     if st.session_state.tts_audio:
+        st.markdown("**Translation audio**")
         st.audio(st.session_state.tts_audio, format="audio/wav")

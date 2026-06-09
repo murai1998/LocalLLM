@@ -5,6 +5,7 @@ from localllm.config import AppSettings, TranslateConfig
 from localllm.pipelines.translate import (
     build_translate_messages,
     parse_unified_response,
+    retranslate_transcript,
     translate_audio,
     translate_text,
 )
@@ -93,6 +94,24 @@ def test_translate_audio_unified(monkeypatch, tmp_path: Path):
     assert result.transcript == "Hello"
     assert result.translation == "Hola"
     assert result.llm_elapsed_sec >= 0.0
+
+
+def test_retranslate_transcript_skips_audio():
+    llm = MagicMock()
+    llm.chat.return_value = "Bonjour"
+
+    result = retranslate_transcript(
+        "Hello there",
+        source_lang="en",
+        target_lang="fr",
+        tone="friendly",
+        llm_client=llm,
+    )
+    assert result.transcript == "Hello there"
+    assert result.translation == "Bonjour"
+    assert result.tone == "friendly"
+    assert result.target_language == "fr"
+    llm.chat.assert_called_once()
 
 
 def test_translate_text_returns_elapsed():

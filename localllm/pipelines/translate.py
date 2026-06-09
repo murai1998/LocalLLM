@@ -174,6 +174,39 @@ def parse_unified_response(text: str) -> tuple[str, str]:
     )
 
 
+def retranslate_transcript(
+    transcript: str,
+    *,
+    source_lang: str | None = None,
+    target_lang: str = "es",
+    tone: ToneId = DEFAULT_TONE,
+    llm_client: LLMClient | None = None,
+    settings: AppSettings | None = None,
+) -> TranslationResult:
+    """Re-translate existing transcript without re-running speech-to-text."""
+    settings = settings or get_settings()
+    client = llm_client or create_llm_client(settings)
+    source = source_lang if source_lang is not None else settings.translate.source_language
+    translation, llm_elapsed = translate_text(
+        transcript,
+        source_lang=source,
+        target_lang=target_lang,
+        tone=tone,
+        llm_client=client,
+        settings=settings,
+    )
+    detected = source or "auto"
+    return TranslationResult(
+        transcript=transcript.strip(),
+        translation=translation,
+        source_language=source or detected,
+        target_language=target_lang,
+        detected_language=detected,
+        llm_elapsed_sec=llm_elapsed,
+        tone=tone,
+    )
+
+
 def translate_text(
     transcript: str,
     *,

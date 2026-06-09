@@ -132,13 +132,34 @@ def _default_app_mode() -> str:
     return "Chat"
 
 
+def _pending_attachments_key(mode: AppMode) -> str:
+    return f"pending_attachments_{mode}"
+
+
+def _attachment_errors_key(mode: AppMode) -> str:
+    return f"attachment_errors_{mode}"
+
+
+def _get_pending_attachments(mode: AppMode) -> list[dict[str, Any]]:
+    key = _pending_attachments_key(mode)
+    if key not in st.session_state:
+        st.session_state[key] = []
+    return st.session_state[key]
+
+
 def _init_session_state() -> None:
     if "ui_messages" not in st.session_state:
         st.session_state.ui_messages = []
-    if "pending_attachments" not in st.session_state:
-        st.session_state.pending_attachments = []
-    if "attachment_errors" not in st.session_state:
-        st.session_state.attachment_errors = []
+    if "pending_attachments" in st.session_state:
+        legacy = st.session_state.pop("pending_attachments")
+        if _pending_attachments_key("chat") not in st.session_state:
+            st.session_state[_pending_attachments_key("chat")] = legacy
+    for mode in ("chat", "agent"):
+        _get_pending_attachments(mode)
+        if _attachment_errors_key(mode) not in st.session_state:
+            st.session_state[_attachment_errors_key(mode)] = []
+    if "attachment_errors" in st.session_state:
+        st.session_state.pop("attachment_errors", None)
     if "uploader_key" not in st.session_state:
         st.session_state.uploader_key = 0
     if "app_mode" not in st.session_state:
@@ -153,10 +174,16 @@ def _save_upload(uploaded, directory: Path) -> Path:
     return dest
 
 
-def _remove_attachment(attach_id: str) -> None:
-    st.session_state.pending_attachments = [
-        item for item in st.session_state.pending_attachments if item["id"] != attach_id
+def _remove_attachment(attach_id: str, mode: AppMode) -> None:
+    key = _pending_attachments_key(mode)
+    st.session_state[key] = [
+        item for item in st.session_state.get(key, []) if item["id"] != attach_id
     ]
+
+
+def _clear_all_attachments(mode: AppMode) -> None:
+    st.session_state[_pending_attachments_key(mode)] = []
+    st.session_state.uploader_key += 1
 
 
 def _stage_uploads(uploads: list[Any], mode: AppMode) -> bool:
@@ -164,7 +191,8 @@ def _stage_uploads(uploads: list[Any], mode: AppMode) -> bool:
     if not uploads:
         return False
     upload_dir = _session_upload_dir()
-    known = {item["name"] for item in st.session_state.pending_attachments}
+    pending = _get_pending_attachments(mode)
+    known = {item["name"] for item in pending}
     new_errors: list[str] = []
     added = False
 
@@ -176,7 +204,7 @@ def _stage_uploads(uploads: list[Any], mode: AppMode) -> bool:
             new_errors.append(err)
             continue
         path = _save_upload(uploaded, upload_dir)
-        st.session_state.pending_attachments.append({
+        pending.append({
             "id": uuid.uuid4().hex,
             "name": uploaded.name,
             "path": str(path),
@@ -187,17 +215,23 @@ def _stage_uploads(uploads: list[Any], mode: AppMode) -> bool:
         added = True
 
     if new_errors:
-        st.session_state.attachment_errors = new_errors
+        st.session_state[_attachment_errors_key(mode)] = new_errors
     return added
 
 
-def _render_attachment_errors() -> None:
-    for err in st.session_state.get("attachment_errors", []):
+def _render_attachment_errors(mode: AppMode) -> None:
+    errors_key = _attachment_errors_key(mode)
+    for err in st.session_state.get(errors_key, []):
         st.error(err, icon="⚠️")
-    st.session_state.attachment_errors = []
+    st.session_state[errors_key] = []
 
 
-def _render_attachment_item(item: dict[str, Any], *, in_sidebar: bool) -> None:
+def _render_attachment_item(
+    item: dict[str, Any],
+    mode: AppMode,
+    *,
+    in_sidebar: bool,
+) -> None:
     path = Path(item["path"])
     kind = item.get("kind", "file")
     cols = st.columns([4, 1]) if in_sidebar else st.columns([6, 1])
@@ -219,35 +253,38 @@ def _render_attachment_item(item: dict[str, Any], *, in_sidebar: bool) -> None:
             key=f"detach_{item['id']}_{'sb' if in_sidebar else 'main'}",
             help="Remove attachment",
             on_click=_remove_attachment,
-            args=(item["id"],),
+            args=(item["id"], mode),
         )
 
 
-def _render_pending_attachments(*, in_sidebar: bool) -> None:
-    items = st.session_state.pending_attachments
+def _render_pending_attachments(mode: AppMode, *, in_sidebar: bool) -> None:
+    items = _get_pending_attachments(mode)
     if not items:
         return
     label = "**Session attachments**" if in_sidebar else "**Attachments for next message**"
     st.markdown(label)
     for item in items:
-        _render_attachment_item(item, in_sidebar=in_sidebar)
-    if in_sidebar and st.button("Clear all attachments", key="clear_all_attachments"):
-        st.session_state.pending_attachments = []
-        st.session_state.uploader_key += 1
-        st.rerun()
+        _render_attachment_item(item, mode, in_sidebar=in_sidebar)
+    if in_sidebar:
+        st.button(
+            "Clear all attachments",
+            key=f"clear_all_attachments_{mode}",
+            on_click=_clear_all_attachments,
+            args=(mode,),
+        )
 
 
-def _attachments_for_next_message() -> list[dict[str, Any]]:
-    return [item for item in st.session_state.pending_attachments if not item.get("sent")]
+def _attachments_for_next_message(mode: AppMode) -> list[dict[str, Any]]:
+    return [item for item in _get_pending_attachments(mode) if not item.get("sent")]
 
 
-def _attachment_paths_for_next_message() -> list[Path]:
-    return [Path(item["path"]) for item in _attachments_for_next_message()]
+def _attachment_paths_for_next_message(mode: AppMode) -> list[Path]:
+    return [Path(item["path"]) for item in _attachments_for_next_message(mode)]
 
 
-def _mark_attachments_sent(paths: list[Path]) -> None:
+def _mark_attachments_sent(mode: AppMode, paths: list[Path]) -> None:
     sent_paths = {str(path) for path in paths}
-    for item in st.session_state.pending_attachments:
+    for item in _get_pending_attachments(mode):
         if item["path"] in sent_paths:
             item["sent"] = True
 
@@ -272,8 +309,8 @@ def _render_attachment_sidebar(mode: AppMode) -> None:
     if _stage_uploads(uploads or [], mode):
         st.session_state.uploader_key += 1
         st.rerun()
-    _render_attachment_errors()
-    _render_pending_attachments(in_sidebar=True)
+    _render_attachment_errors(mode)
+    _render_pending_attachments(mode, in_sidebar=True)
 
 
 def run_app() -> None:
@@ -323,8 +360,10 @@ def run_app() -> None:
             elif st.session_state.app_mode == "Translate":
                 for key in ("transcript", "translation", "tts_audio", "translate_result", "recorded_audio"):
                     st.session_state.pop(key, None)
-            st.session_state.pending_attachments = []
-            st.session_state.attachment_errors = []
+            active_mode = "chat" if st.session_state.app_mode == "Chat" else "agent"
+            if st.session_state.app_mode in ("Chat", "Agent"):
+                st.session_state[_pending_attachments_key(active_mode)] = []
+                st.session_state[_attachment_errors_key(active_mode)] = []
             st.session_state.uploader_key += 1
             st.rerun()
 
@@ -349,7 +388,7 @@ def run_app() -> None:
 
 
 def _run_agent_ui() -> None:
-    _render_pending_attachments(in_sidebar=False)
+    _render_pending_attachments("agent", in_sidebar=False)
 
     for msg in st.session_state.agent_messages:
         with st.chat_message(msg["role"]):
@@ -363,7 +402,7 @@ def _run_agent_ui() -> None:
         return
 
     user_prompt = prompt.strip()
-    pending = _attachments_for_next_message()
+    pending = _attachments_for_next_message("agent")
     attachment_names = [item["name"] for item in pending]
     display = user_prompt
     if attachment_names:
@@ -371,7 +410,7 @@ def _run_agent_ui() -> None:
 
     engine = get_engine()
     try:
-        attach_paths = _attachment_paths_for_next_message()
+        attach_paths = _attachment_paths_for_next_message("agent")
         user_text, image_paths, audio_path = prepare_agent_context(
             user_prompt,
             attach_paths,
@@ -430,12 +469,12 @@ def _run_agent_ui() -> None:
         "content": final_reply,
         "trace": trace,
     })
-    _mark_attachments_sent(attach_paths)
+    _mark_attachments_sent("agent", attach_paths)
     st.rerun()
 
 
 def _run_chat_ui() -> None:
-    _render_pending_attachments(in_sidebar=False)
+    _render_pending_attachments("chat", in_sidebar=False)
 
     for msg in st.session_state.ui_messages:
         with st.chat_message(msg["role"]):
@@ -449,8 +488,8 @@ def _run_chat_ui() -> None:
         return
 
     user_prompt = prompt.strip()
-    pending = _attachments_for_next_message()
-    attach_paths = _attachment_paths_for_next_message()
+    pending = _attachments_for_next_message("chat")
+    attach_paths = _attachment_paths_for_next_message("chat")
     try:
         user_text, image_paths, audio_path = prepare_chat_turn(
             user_prompt,
@@ -487,7 +526,7 @@ def _run_chat_ui() -> None:
             st.markdown(reply)
 
     st.session_state.ui_messages.append({"role": "assistant", "content": reply})
-    _mark_attachments_sent(attach_paths)
+    _mark_attachments_sent("chat", attach_paths)
     st.rerun()
 
 

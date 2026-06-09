@@ -130,12 +130,59 @@ def _group_regions(
     return chunks or _fixed_windows(audio, sample_rate, config)
 
 
+def _pad_to_min_length(
+    audio: np.ndarray,
+    sample_rate: int,
+    min_seconds: float,
+) -> np.ndarray:
+    min_samples = int(min_seconds * sample_rate)
+    if len(audio) >= min_samples or len(audio) == 0:
+        return audio
+    pad = np.zeros(min_samples - len(audio), dtype=audio.dtype)
+    return np.concatenate([audio, pad])
+
+
+def chunk_audio_live(
+    audio: np.ndarray,
+    sample_rate: int,
+    config: TranslateLiveConfig | None = None,
+) -> list[SpeechChunk]:
+    """Fixed-duration windows for live translation (Gemma STT needs multi-second clips)."""
+    from localllm.config import TranslateLiveConfig as LiveCfg
+
+    config = config or LiveCfg()
+    if len(audio) == 0:
+        return []
+
+    chunk_len = int(config.max_chunk_seconds * sample_rate)
+    overlap = int(config.overlap_seconds * sample_rate)
+    step = max(chunk_len - overlap, 1)
+
+    chunks: list[SpeechChunk] = []
+    for start in range(0, len(audio), step):
+        end = min(start + chunk_len, len(audio))
+        piece = audio[start:end].copy()
+        if end >= len(audio):
+            piece = _pad_to_min_length(piece, sample_rate, config.min_chunk_seconds)
+        if len(piece) < int(sample_rate * 0.25):
+            break
+        chunks.append(SpeechChunk(start_sample=start, end_sample=end, audio=piece))
+        if end >= len(audio):
+            break
+
+    if not chunks:
+        piece = _pad_to_min_length(audio.copy(), sample_rate, config.min_chunk_seconds)
+        chunks = [SpeechChunk(0, len(audio), piece)]
+
+    return chunks
+
+
 def chunk_audio_vad(
     audio: np.ndarray,
     sample_rate: int,
     config: TranslateLiveConfig | None = None,
 ) -> list[SpeechChunk]:
-    """Split audio into 2–4 s VAD-guided chunks with overlap (Phase 2)."""
+    """Split audio into VAD-guided chunks with overlap (Phase 2)."""
     from localllm.config import TranslateLiveConfig as LiveCfg
 
     config = config or LiveCfg()

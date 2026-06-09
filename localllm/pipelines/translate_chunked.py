@@ -6,11 +6,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterator
 
+import numpy as np
+
 from localllm.client.factory import create_llm_client
 from localllm.client.protocol import LLMClient
 from localllm.config import AppSettings, get_settings
-from localllm.media.audio import load_mono_16k, merge_transcripts, write_wav
-from localllm.media.vad import SpeechChunk, chunk_audio_vad
+from localllm.media.audio import load_mono_16k, merge_transcripts, to_wav_16k, write_wav
+from localllm.media.vad import SpeechChunk, _pad_to_min_length, chunk_audio_live
 from localllm.pipelines.stt_batch import _transcribe_chunk
 from localllm.pipelines.translate import (
     DEFAULT_TONE,
@@ -63,9 +65,18 @@ def _transcribe_chunk_audio(
     client: LLMClient,
     settings: AppSettings,
     tmp_dir: Path,
+    min_chunk_seconds: float,
 ) -> str:
+    audio = _pad_to_min_length(
+        np.asarray(chunk.audio, dtype=np.float32),
+        sample_rate,
+        min_chunk_seconds,
+    )
+    if audio.size == 0:
+        return ""
+
     wav_path = tmp_dir / f"chunk_{chunk.start_sample}.wav"
-    write_wav(wav_path, chunk.audio, sample_rate=sample_rate)
+    write_wav(wav_path, audio, sample_rate=sample_rate)
     prompt = ASR_PROMPT.replace("its original language", language_hint)
     return _transcribe_chunk(wav_path, prompt=prompt, client=client, settings=settings)
 
@@ -88,47 +99,101 @@ def iter_chunk_translations(
     lang_hint = language_label(source) if source else "its original language"
     live_cfg = settings.translate.live
 
+    wav_path = to_wav_16k(audio_path)
+    cleanup_wav = wav_path.resolve() != Path(audio_path).resolve()
     sr = settings.stt.sample_rate
-    audio = load_mono_16k(audio_path, sample_rate=sr)
-    chunks = chunk_audio_vad(audio, sr, live_cfg)
-    if not chunks:
-        return
+    try:
+        audio = load_mono_16k(wav_path, sample_rate=sr)
+        if audio.size == 0:
+            return
 
-    with tempfile.TemporaryDirectory(prefix="localllm_live_") as tmp:
-        tmp_dir = Path(tmp)
-        for index, chunk in enumerate(chunks):
-            started = time.perf_counter()
-            transcript_piece = _transcribe_chunk_audio(
-                chunk,
-                sample_rate=sr,
-                language_hint=lang_hint,
-                client=client,
-                settings=settings,
-                tmp_dir=tmp_dir,
-            )
-            if not transcript_piece.strip():
-                continue
+        chunks = chunk_audio_live(audio, sr, live_cfg)
+        if not chunks:
+            return
 
-            translation_piece, _ = translate_text(
-                transcript_piece,
-                source_lang=source,
-                target_lang=target,
-                tone=tone,
-                llm_client=client,
-                settings=settings,
-            )
-            elapsed = time.perf_counter() - started
-            item = ChunkTranslation(
-                index=index,
-                transcript=transcript_piece.strip(),
-                translation=translation_piece.strip(),
-                elapsed_sec=elapsed,
-                start_sec=chunk.start_sample / sr,
-                end_sec=chunk.end_sample / sr,
-            )
-            if on_progress:
-                on_progress(index + 1, len(chunks), item)
-            yield item
+        with tempfile.TemporaryDirectory(prefix="localllm_live_") as tmp:
+            tmp_dir = Path(tmp)
+            for index, chunk in enumerate(chunks):
+                started = time.perf_counter()
+                transcript_piece = _transcribe_chunk_audio(
+                    chunk,
+                    sample_rate=sr,
+                    language_hint=lang_hint,
+                    client=client,
+                    settings=settings,
+                    tmp_dir=tmp_dir,
+                    min_chunk_seconds=live_cfg.min_chunk_seconds,
+                )
+                if not transcript_piece.strip():
+                    continue
+
+                translation_piece, _ = translate_text(
+                    transcript_piece,
+                    source_lang=source,
+                    target_lang=target,
+                    tone=tone,
+                    llm_client=client,
+                    settings=settings,
+                )
+                elapsed = time.perf_counter() - started
+                item = ChunkTranslation(
+                    index=index,
+                    transcript=transcript_piece.strip(),
+                    translation=translation_piece.strip(),
+                    elapsed_sec=elapsed,
+                    start_sec=chunk.start_sample / sr,
+                    end_sec=chunk.end_sample / sr,
+                )
+                if on_progress:
+                    on_progress(index + 1, len(chunks), item)
+                yield item
+    finally:
+        if cleanup_wav:
+            wav_path.unlink(missing_ok=True)
+
+
+def _fallback_batch_chunks(
+    wav_path: Path,
+    *,
+    source_lang: str | None,
+    target_lang: str,
+    tone: ToneId,
+    client: LLMClient,
+    settings: AppSettings,
+    lang_hint: str,
+) -> list[ChunkTranslation]:
+    """Fall back to batch STT windows when per-chunk live STT produced nothing."""
+    from localllm.pipelines.stt_batch import transcribe_file
+
+    started = time.perf_counter()
+    transcript = transcribe_file(
+        wav_path,
+        llm_client=client,
+        settings=settings,
+        language_hint=lang_hint,
+    )
+    if not transcript.strip():
+        return []
+
+    translation, _ = translate_text(
+        transcript,
+        source_lang=source_lang,
+        target_lang=target_lang,
+        tone=tone,
+        llm_client=client,
+        settings=settings,
+    )
+    elapsed = time.perf_counter() - started
+    return [
+        ChunkTranslation(
+            index=0,
+            transcript=transcript.strip(),
+            translation=translation.strip(),
+            elapsed_sec=elapsed,
+            start_sec=0.0,
+            end_sec=0.0,
+        )
+    ]
 
 
 def translate_audio_chunked(
@@ -146,6 +211,8 @@ def translate_audio_chunked(
     target = target_lang or settings.translate.target_language
     source = source_lang if source_lang is not None else settings.translate.source_language
 
+    client = llm_client or create_llm_client(settings)
+    lang_hint = language_label(source) if source else "its original language"
     started = time.perf_counter()
     chunk_results: list[ChunkTranslation] = []
     transcript_parts: list[str] = []
@@ -156,13 +223,34 @@ def translate_audio_chunked(
         source_lang=source,
         target_lang=target,
         tone=tone,
-        llm_client=llm_client,
+        llm_client=client,
         settings=settings,
         on_progress=on_progress,
     ):
         chunk_results.append(item)
         transcript_parts.append(item.transcript)
         translation_parts.append(item.translation)
+
+    if not chunk_results:
+        wav_path = to_wav_16k(audio_path)
+        cleanup_wav = wav_path.resolve() != Path(audio_path).resolve()
+        try:
+            chunk_results = _fallback_batch_chunks(
+                wav_path,
+                source_lang=source,
+                target_lang=target,
+                tone=tone,
+                client=client,
+                settings=settings,
+                lang_hint=lang_hint,
+            )
+            transcript_parts = [item.transcript for item in chunk_results]
+            translation_parts = [item.translation for item in chunk_results]
+            if chunk_results and on_progress:
+                on_progress(1, 1, chunk_results[0])
+        finally:
+            if cleanup_wav:
+                wav_path.unlink(missing_ok=True)
 
     transcript = merge_transcripts(transcript_parts)
     translation = merge_transcripts(translation_parts)

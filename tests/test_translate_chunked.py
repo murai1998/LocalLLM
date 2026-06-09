@@ -30,7 +30,11 @@ def test_translate_audio_chunked(monkeypatch, tmp_path: Path):
         audio=np.zeros(16000 * 3, dtype=np.float32),
     )
     monkeypatch.setattr(
-        "localllm.pipelines.translate_chunked.chunk_audio_vad",
+        "localllm.pipelines.translate_chunked.to_wav_16k",
+        lambda path: path,
+    )
+    monkeypatch.setattr(
+        "localllm.pipelines.translate_chunked.chunk_audio_live",
         lambda *args, **kwargs: [chunk, chunk],
     )
     monkeypatch.setattr(
