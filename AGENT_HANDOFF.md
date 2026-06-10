@@ -114,7 +114,8 @@ pytest -q                          # unit tests; no GPU/model required
 | Phase 1 client SDK | **Done** — `localllm/client/` |
 | Phase 2 gateway service | **Done** — `localllm-serve`, `localllm/service/` |
 | Hardening sweep (plan.md Workstream A) | **Done 2026-06-10** — gateway guardrails (413/400/502/503/504, optional bearer auth), agent tool sandbox (secret denylist, extension allowlist, traversal fix), TTS fixes (no ja/ko garbage fallbacks, WAV concat preserves audio, cache keyed on use_cuda), staging cleanup, VAD threshold, STT tail-drop fix, `enable_thinking=False` code default, HF download revision pin, ruff/mypy/bandit config, CI workflow. **Deliberately skipped:** untracking `hf_token.txt` (user decision) |
-| Unit tests | **103 passed** (client, gateway + guardrails, agent parser + tool security, media, TTS, secrets) |
+| Web UI (plan.md Workstream C) | **MVP done 2026-06-10** — React 19 + Vite + Tailwind v4 SPA in `webui/`, FastAPI server `localllm/webui/server.py` (`localllm-webui`, :8095) serving the static bundle + REST API (chat, NDJSON-streaming audio translate, TTS, transcribe, OCR, health/meta). Mic capture via MediaRecorder with live level meter — foundation for Workstream B. Rebuild: `cd webui && npm install && npm run build` (Node is build-time only). Streamlit apps still alive. |
+| Unit tests | **115 passed** (client, gateway + guardrails, agent parser + tool security, media, TTS, secrets, web UI API) |
 | GGUF downloaded | **Yes** on dev machine — `models/gemma-4-12b-it-Q6_K.gguf` + `models/mmproj-F16.gguf` |
 | llama-server integration tested end-to-end | **Confirmed** on RTX 5060 (chat works); gateway path needs smoke test |
 | Streamlit | Fixed (launcher subprocess + no nested `launch()`) |

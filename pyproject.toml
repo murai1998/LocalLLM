@@ -47,6 +47,7 @@ localllm-stt = "apps.stt_batch:main"
 localllm-download = "scripts.download_model:main"
 localllm-serve = "apps.serve:main"
 localllm-translate-streamlit = "apps.translate_streamlit_launcher:launch"
+localllm-webui = "apps.webui:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -105,9 +105,16 @@ pip install -e ".[dev]"
 localllm-download                 # GGUF + mmproj (~10 GB; needs HF token)
 localllm-download --voices --skip-model   # optional: pre-fetch offline TTS voices
 localllm-serve                    # gateway + inference
+localllm-webui                    # new web UI → http://127.0.0.1:8095
 localllm-translate-streamlit      # or: localllm-chat / localllm-streamlit / ...
 pytest -q                         # unit tests; no GPU or model required
 ```
+
+The **web UI** (`localllm-webui`) is a React single-page app served as a prebuilt static
+bundle — no Node required at runtime. It covers chat, voice translation (microphone or
+file, with live per-chunk progress and spoken output), batch transcription, document OCR,
+and a status dashboard. Rebuild after frontend changes with `cd webui && npm install &&
+npm run build`. The Streamlit apps remain available.
 
 ## Why it matters
 

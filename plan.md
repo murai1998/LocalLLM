@@ -108,6 +108,13 @@ Browser (mic)                       FastAPI live service                    Gate
 
 ## Workstream C — A beautiful, appealing interface
 
+> **Status (2026-06-10): MVP EXECUTED** — React 19 + TypeScript + Vite + Tailwind v4 SPA
+> in `webui/`, served as a static bundle by a new FastAPI server
+> (`localllm/webui/server.py`, `localllm-webui`, :8095). Pages: Chat, Translate (mic
+> recording with live level meter + upload, NDJSON streaming chunk progress, Piper TTS
+> playback), Transcribe, Documents (OCR), Status. 12 API tests; Streamlit apps kept
+> alive. Workstream B will build on this UI's microphone plumbing.
+
 ### Recommendation: a local-first web app — **React + TypeScript + Vite**, served as a static bundle by the FastAPI service
 
 Streamlit got the project this far, but it cannot deliver continuous audio, polished visuals, or sub-second interactivity. The replacement should still honor the core promise: **no internet, no Node at runtime** — Node is build-time only; the compiled bundle ships in the repo/wheel and FastAPI serves it from `localhost`.
