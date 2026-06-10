@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import librosa
@@ -37,12 +36,23 @@ def chunk_audio(
 ) -> list[np.ndarray]:
     """Split audio into overlapping chunks (max 30s per Gemma limit)."""
     chunk_len = int(min(config.chunk_seconds, config.max_chunk_seconds) * sample_rate)
+    max_len = int(config.max_chunk_seconds * sample_rate)
     overlap = int(config.overlap_seconds * sample_rate)
     step = max(chunk_len - overlap, 1)
     chunks: list[np.ndarray] = []
     for start in range(0, len(audio), step):
         piece = audio[start : start + chunk_len]
         if len(piece) < sample_rate * 0.5:
+            # Don't drop a short trailing piece: extend the previous chunk to the
+            # end of the audio when it still fits under the hard Gemma limit,
+            # otherwise keep the tail as its own small chunk.
+            if chunks:
+                prev_start = start - step
+                extended = audio[prev_start : start + len(piece)]
+                if len(extended) <= max_len:
+                    chunks[-1] = extended
+                elif len(piece):
+                    chunks.append(piece)
             break
         chunks.append(piece)
         if start + chunk_len >= len(audio):

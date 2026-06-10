@@ -7,8 +7,8 @@ import pytest
 import soundfile as sf
 
 from localllm.agents.media_tools import convert_audio_file, extract_document_text
-from localllm.agents.tool_registry import tools_for_skills
 from localllm.agents.skills import resolve_skills
+from localllm.agents.tool_registry import tools_for_skills
 from localllm.media.convert import convert_audio_to_wav, ffmpeg_available, safe_media_path
 
 

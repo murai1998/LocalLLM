@@ -50,20 +50,16 @@ VOICE_OPTIONS: Final[dict[str, list[dict[str, str]]]] = {
         {"id": "it_paola", "label": "Paola (female)", "voice": "it_IT-paola-medium"},
         {"id": "it_riccardo", "label": "Riccardo (male)", "voice": "it_IT-riccardo-x_low"},
     ],
-    "ja": [
-        {"id": "ja_default", "label": "Japanese (zh fallback voice)", "voice": "zh_CN-huayan-medium"},
-    ],
     "zh": [
         {"id": "zh_huayan", "label": "Huayan (female)", "voice": "zh_CN-huayan-medium"},
         {"id": "zh_chaowen", "label": "Chaowen (male)", "voice": "zh_CN-chaowen-medium"},
-    ],
-    "ko": [
-        {"id": "ko_default", "label": "Korean (en fallback)", "voice": "en_US-lessac-medium"},
     ],
     "ar": [
         {"id": "ar_kareem", "label": "Kareem", "voice": "ar_JO-kareem-medium"},
     ],
 }
+# No Piper voices exist for ja/ko; cross-language fallbacks produce gibberish,
+# so those languages report tts_supported() == False instead.
 
 _voice_name_by_id: dict[str, str] = {
     option["id"]: option["voice"]
@@ -74,13 +70,19 @@ _voice_name_by_id: dict[str, str] = {
 
 def voice_options_for_language(language: str) -> list[dict[str, str]]:
     code = language.split("-")[0].lower()
-    return VOICE_OPTIONS.get(code, VOICE_OPTIONS["en"])
+    return VOICE_OPTIONS.get(code, [])
+
+
+def tts_supported(language: str) -> bool:
+    return bool(voice_options_for_language(language))
 
 
 def resolve_piper_voice_name(*, language: str, voice_id: str | None = None) -> str:
     if voice_id and voice_id in _voice_name_by_id:
         return _voice_name_by_id[voice_id]
     options = voice_options_for_language(language)
+    if not options:
+        raise ValueError(f"No local Piper voice available for language '{language}'")
     return options[0]["voice"]
 
 
@@ -98,21 +100,38 @@ def _ensure_voice_files(voice_name: str) -> Path:
     model_dir.mkdir(parents=True, exist_ok=True)
     onnx_path = model_dir / f"{voice_name}.onnx"
     if not onnx_path.is_file():
-        download_voice(voice_name, model_dir)
+        try:
+            download_voice(voice_name, model_dir)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Piper voice '{voice_name}' is not cached in {model_dir} and could not "
+                f"be downloaded ({exc.__class__.__name__}: {exc}). "
+                "Pre-fetch voices while online with: localllm-download --voices"
+            ) from exc
     if not onnx_path.is_file():
         raise FileNotFoundError(
             f"Piper voice '{voice_name}' not found in {model_dir}. "
-            "Download requires network once; then fully offline."
+            "Pre-fetch voices while online with: localllm-download --voices"
         )
     return onnx_path
 
 
+def download_voices(languages: list[str] | None = None) -> list[str]:
+    """Pre-download Piper voices so runtime stays fully offline."""
+    codes = languages or sorted(VOICE_OPTIONS)
+    downloaded: list[str] = []
+    for code in codes:
+        for option in voice_options_for_language(code):
+            _ensure_voice_files(option["voice"])
+            downloaded.append(option["voice"])
+    return downloaded
+
+
 @lru_cache(maxsize=8)
-def _load_voice(voice_name: str) -> PiperVoice:
+def _load_voice(voice_name: str, use_cuda: bool) -> PiperVoice:
     if PiperVoice is None:
         raise RuntimeError("piper-tts is not installed")
     model_path = _ensure_voice_files(voice_name)
-    use_cuda = get_settings().tts.use_cuda
     return PiperVoice.load(model_path, use_cuda=use_cuda)
 
 
@@ -133,10 +152,10 @@ def _chunks_to_wav(voice: PiperVoice, text: str) -> bytes:
 
 def warmup_tts(*, language: str = "en", voice_id: str | None = None) -> bool:
     """Load a Piper voice into memory (offline after model is cached)."""
-    if not PIPER_AVAILABLE:
+    if not PIPER_AVAILABLE or not tts_supported(language):
         return False
     voice_name = resolve_piper_voice_name(language=language, voice_id=voice_id)
-    _load_voice(voice_name)
+    _load_voice(voice_name, get_settings().tts.use_cuda)
     return True
 
 
@@ -149,5 +168,5 @@ def synthesize_speech(
     if not text.strip():
         raise ValueError("Cannot synthesize empty text")
     voice_name = resolve_piper_voice_name(language=language, voice_id=voice_id)
-    voice = _load_voice(voice_name)
+    voice = _load_voice(voice_name, get_settings().tts.use_cuda)
     return _chunks_to_wav(voice, text.strip())

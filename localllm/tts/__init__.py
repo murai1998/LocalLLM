@@ -1,7 +1,9 @@
 from localllm.tts.piper import (
     PIPER_AVAILABLE,
     VOICE_OPTIONS,
+    download_voices,
     synthesize_speech,
+    tts_supported,
     voice_options_for_language,
     warmup_tts,
 )
@@ -15,7 +17,9 @@ __all__ = [
     "TTS_ENGINE",
     "TTS_REQUIRES_INTERNET",
     "VOICE_OPTIONS",
+    "download_voices",
     "synthesize_speech",
+    "tts_supported",
     "voice_options_for_language",
     "warmup_tts",
 ]

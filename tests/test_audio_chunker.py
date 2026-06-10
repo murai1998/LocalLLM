@@ -1,6 +1,7 @@
+import numpy as np
+
 from localllm.config import SttConfig
 from localllm.media.audio import chunk_audio, merge_transcripts
-import numpy as np
 
 
 def test_chunk_audio_respects_max_duration():

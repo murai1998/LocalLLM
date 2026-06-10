@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import tempfile
 import time
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterator
 
 import numpy as np
 
@@ -13,6 +13,7 @@ from localllm.client.protocol import LLMClient
 from localllm.config import AppSettings, get_settings
 from localllm.media.audio import load_mono_16k, merge_transcripts, to_wav_16k, write_wav
 from localllm.media.vad import SpeechChunk, _pad_to_min_length, chunk_audio_live
+from localllm.model.prompts import ASR_PROMPT
 from localllm.pipelines.stt_batch import _transcribe_chunk
 from localllm.pipelines.translate import (
     DEFAULT_TONE,
@@ -20,7 +21,6 @@ from localllm.pipelines.translate import (
     language_label,
     translate_text,
 )
-from localllm.model.prompts import ASR_PROMPT
 from localllm.tts.sentence_queue import SentenceQueue, strip_partial_tail
 
 ProgressCallback = Callable[[int, int, "ChunkTranslation"], None]

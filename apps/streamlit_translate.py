@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import shutil
 import tempfile
 import time
 import uuid
@@ -17,6 +18,7 @@ from localllm.pipelines.translate import (
     TONE_PRESETS,
     ToneId,
     TranslationResult,
+    language_label,
     retranslate_transcript,
     translate_audio,
 )
@@ -27,13 +29,41 @@ from localllm.pipelines.translate_chunked import (
     synthesize_new_sentences,
     translate_audio_chunked,
 )
-from localllm.tts import PIPER_AVAILABLE, synthesize_speech, voice_options_for_language, warmup_tts
+from localllm.tts import (
+    PIPER_AVAILABLE,
+    synthesize_speech,
+    tts_supported,
+    voice_options_for_language,
+    warmup_tts,
+)
 from localllm.tts.sentence_queue import SentenceQueue
 
 SUPPORTED_EXTENSIONS = {"wav", "mp3", "m4a", "ogg", "flac", "webm"}
 LIVE_UPLOAD_KEY = "translate_live_upload"
 LIVE_MIC_KEY = "translate_live_mic"
 LIVE_STAGING_ROOT = Path(tempfile.gettempdir()) / "localllm" / "translate_live"
+STAGING_MAX_AGE_SECONDS = 24 * 3600
+
+
+def sweep_stale_staging(
+    root: Path = LIVE_STAGING_ROOT,
+    max_age_seconds: float = STAGING_MAX_AGE_SECONDS,
+) -> int:
+    """Delete staging dirs from old sessions so recordings don't pile up in temp."""
+    if not root.is_dir():
+        return 0
+    now = time.time()
+    removed = 0
+    for entry in root.iterdir():
+        try:
+            if entry.is_dir() and now - entry.stat().st_mtime > max_age_seconds:
+                shutil.rmtree(entry, ignore_errors=True)
+                removed += 1
+        except OSError:
+            continue
+    return removed
+
+
 LANGUAGE_OPTIONS = [("auto", "Auto-detect")] + [
     (code, label) for code, label in sorted(LANGUAGE_LABELS.items(), key=lambda item: item[1])
 ]
@@ -63,6 +93,9 @@ def init_translate_state() -> None:
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+    if not st.session_state.get("staging_swept"):
+        sweep_stale_staging()
+        st.session_state.staging_swept = True
 
 
 @st.cache_resource
@@ -96,16 +129,24 @@ def render_translate_sidebar() -> tuple[str | None, str, ToneId, str | None]:
     )
 
     voice_options = voice_options_for_language(target_lang)
-    voice_ids = [option["id"] for option in voice_options]
-    if st.session_state.get("tts_voice_id") not in voice_ids:
-        st.session_state.tts_voice_id = voice_ids[0]
-    voice_id = st.radio(
-        "Voice",
-        voice_ids,
-        format_func=lambda vid: next(o["label"] for o in voice_options if o["id"] == vid),
-        key="translate_voice_radio",
-    )
-    st.session_state.tts_voice_id = voice_id
+    if voice_options:
+        voice_ids = [option["id"] for option in voice_options]
+        if st.session_state.get("tts_voice_id") not in voice_ids:
+            st.session_state.tts_voice_id = voice_ids[0]
+        voice_id = st.radio(
+            "Voice",
+            voice_ids,
+            format_func=lambda vid: next(o["label"] for o in voice_options if o["id"] == vid),
+            key="translate_voice_radio",
+        )
+        st.session_state.tts_voice_id = voice_id
+    else:
+        voice_id = None
+        st.session_state.tts_voice_id = None
+        st.warning(
+            f"No local Piper voice for {language_label(target_lang)} — "
+            "speech output is disabled for this target language."
+        )
 
     llm_ok = get_translate_llm_client().is_ready()
     tts_ready = get_tts_warmup()
@@ -300,6 +341,9 @@ def _play_translation(voice_id: str | None) -> bool:
     if not PIPER_AVAILABLE:
         st.error("Install Piper TTS: `pip install piper-tts`")
         return False
+    if not tts_supported(target_lang):
+        st.error(f"No local Piper voice for {language_label(target_lang)}.")
+        return False
 
     started = time.perf_counter()
     with st.spinner("Generating speech…"):
@@ -460,7 +504,7 @@ def _run_live_chunked(
         )
         return
 
-    if auto_tts and result.translation.strip() and PIPER_AVAILABLE:
+    if auto_tts and result.translation.strip() and PIPER_AVAILABLE and tts_supported(target_lang):
         queue = _sentence_queue()
         audio, spoken, tts_elapsed = synthesize_new_sentences(
             result.translation,
@@ -549,8 +593,9 @@ def run_translate_ui(
         settings = get_settings()
         live_cfg = settings.translate.live
         st.markdown(
-            f"Phase 2: VAD splits audio into **{live_cfg.min_chunk_seconds:.0f}–"
-            f"{live_cfg.max_chunk_seconds:.0f} s** chunks with overlap. "
+            f"Audio is split into fixed **{live_cfg.min_chunk_seconds:.0f}–"
+            f"{live_cfg.max_chunk_seconds:.0f} s** windows with "
+            f"**{live_cfg.overlap_seconds:.1f} s** overlap. "
             "Transcript and translation update per chunk; TTS speaks **completed sentences** only."
         )
         st.session_state.live_auto_tts = st.checkbox(

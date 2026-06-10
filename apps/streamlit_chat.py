@@ -14,7 +14,6 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from localllm.agents import build_agent_graph, discover_skills, invoke_agent
 from localllm.chat import ChatEngine, UserTurn
-from localllm.config import get_settings
 from localllm.media.attachments import (
     AppMode,
     attachment_kind,

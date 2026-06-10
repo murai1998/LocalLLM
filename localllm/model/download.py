@@ -30,11 +30,13 @@ def ensure_gguf_assets(
     gguf = cache / gguf_name
     mmproj = settings.mmproj_path()
     repo = settings.model.gguf_repo
+    revision = settings.model.revision
 
     if not gguf.is_file():
         downloaded = hf_hub_download(
             repo_id=repo,
             filename=gguf_name,
+            revision=revision,
             local_dir=str(cache),
         )
         gguf = Path(downloaded)
@@ -43,6 +45,7 @@ def ensure_gguf_assets(
         downloaded = hf_hub_download(
             repo_id=repo,
             filename=settings.model.mmproj_file,
+            revision=revision,
             local_dir=str(cache),
         )
         mmproj = Path(downloaded)

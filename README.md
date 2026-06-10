@@ -94,6 +94,21 @@ adopted at all.
 `GPU acceleration on CUDA & Apple Metal` · `provider-abstraction for cloud/local portability` ·
 `security hardening (sandboxing, SSRF defense)` · `Python packaging & testing`
 
+## Getting started
+
+Setup, commands, and per-platform run instructions live in
+**[docs/RUNNING.md](docs/RUNNING.md)**. The short version:
+
+```bash
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+localllm-download                 # GGUF + mmproj (~10 GB; needs HF token)
+localllm-download --voices --skip-model   # optional: pre-fetch offline TTS voices
+localllm-serve                    # gateway + inference
+localllm-translate-streamlit      # or: localllm-chat / localllm-streamlit / ...
+pytest -q                         # unit tests; no GPU or model required
+```
+
 ## Why it matters
 
 LocalLLM proves the ability to take a raw open-weights model and turn it into a **production-

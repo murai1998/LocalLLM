@@ -51,6 +51,8 @@ def _yaml_with_env_overrides(raw: dict[str, Any], *, env_prefix: str) -> dict[st
 
 class ModelConfig(BaseSettings):
     gguf_repo: str = "unsloth/gemma-4-12b-it-GGUF"
+    # Pin to a commit hash for supply-chain safety; "main" tracks the latest upload.
+    revision: str = "main"
     quantization: str = "q6_k"
     gguf_file: str = ""
     mmproj_file: str = "mmproj-F16.gguf"
@@ -82,7 +84,8 @@ class GenerationConfig(BaseSettings):
     max_tokens: int = 4096
     temperature: float = 0.7
     top_p: float = 0.95
-    enable_thinking: bool = True
+    # Disabled by default: enabling without a large token budget yields empty replies.
+    enable_thinking: bool = False
     stt_temperature: float = 0.1
     stt_max_tokens: int = 2048
 
@@ -143,6 +146,12 @@ class ServiceConfig(BaseSettings):
     max_concurrent_requests: int = 2
     autostart_llama_server: bool = True
     startup_timeout_sec: int = 300
+    # Optional bearer token for /v1/* endpoints (set before exposing beyond localhost).
+    api_key: str | None = None
+    # How long a request may wait for an inference slot before 503.
+    queue_timeout_sec: float = 30.0
+    # Reject request bodies larger than this (base64 audio/images can get big).
+    max_request_bytes: int = 64 * 1024 * 1024
 
     @property
     def base_url(self) -> str:

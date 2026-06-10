@@ -7,6 +7,34 @@ from langchain_core.tools import tool
 
 from localllm.config import ROOT
 
+# Files that may hold credentials — never exposed to the agent.
+SECRET_FILENAMES = {"hf_token.txt", ".env", ".env.local", ".env.example"}
+# Directories the agent must not traverse into.
+BLOCKED_DIRS = {".git"}
+# Only plain-text project files are readable ("" allows extensionless files
+# like LICENSE / Dockerfile).
+READABLE_SUFFIXES = {
+    "",
+    ".cfg",
+    ".css",
+    ".csv",
+    ".html",
+    ".ini",
+    ".js",
+    ".json",
+    ".md",
+    ".ps1",
+    ".py",
+    ".rst",
+    ".sh",
+    ".toml",
+    ".ts",
+    ".txt",
+    ".xml",
+    ".yaml",
+    ".yml",
+}
+
 
 def _is_within_root(path: Path, root: Path) -> bool:
     try:
@@ -21,6 +49,10 @@ def _safe_path(path: str) -> Path:
     p = candidate.resolve() if candidate.is_absolute() else (ROOT / candidate).resolve()
     if not _is_within_root(p, ROOT):
         raise ValueError("Path must stay inside the project directory.")
+    if any(part.lower() in BLOCKED_DIRS for part in p.parts):
+        raise ValueError("Path is not accessible.")
+    if p.name.lower() in SECRET_FILENAMES:
+        raise ValueError("Path is not accessible.")
     return p
 
 
@@ -28,6 +60,8 @@ def _safe_path(path: str) -> Path:
 def read_file(path: str) -> str:
     """Read a text file inside the project (relative or absolute within project)."""
     p = _safe_path(path)
+    if p.suffix.lower() not in READABLE_SUFFIXES:
+        return f"Error: file type not readable: {path}"
     if not p.is_file():
         return f"Error: file not found: {path}"
     return p.read_text(encoding="utf-8", errors="replace")[:8000]
@@ -53,7 +87,8 @@ def write_note(filename: str, content: str) -> str:
     out_dir = ROOT / "outputs"
     out_dir.mkdir(exist_ok=True)
     dest = (out_dir / filename).resolve()
-    if not str(dest).startswith(str(out_dir.resolve())):
+    if dest == out_dir.resolve() or not _is_within_root(dest, out_dir):
         return "Error: invalid filename"
+    dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(content, encoding="utf-8")
     return json.dumps({"written": str(dest)})

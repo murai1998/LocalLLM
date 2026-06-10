@@ -1,7 +1,6 @@
 from unittest.mock import patch
 
 from localllm.agents.research_tools import get_current_datetime, get_system_status, search_project
-from localllm.config import ROOT
 
 
 def test_search_project_finds_text(tmp_path, monkeypatch):

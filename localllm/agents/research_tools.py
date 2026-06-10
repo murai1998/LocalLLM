@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, timezone
-from pathlib import Path
 
 import httpx
 from langchain_core.tools import tool
@@ -11,7 +10,6 @@ from langchain_core.tools import tool
 from localllm.agents.tools import _safe_path
 from localllm.config import ROOT, get_settings
 from localllm.devices.resolver import detect_platform
-
 
 _TEXT_SUFFIXES = {
     ".py",

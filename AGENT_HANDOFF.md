@@ -2,9 +2,9 @@
 
 > **For the AI agent:** Read this file first when resuming work on this project in a new window or on another machine. It captures intent, decisions, architecture, and current status so you can continue without re-discovery.
 
-**Last updated:** 2026-06-05  
+**Last updated:** 2026-06-10  
 **Project path:** `C:\Projects\LocalLLM` (may differ on other machines)  
-**Version:** `localllm` 0.2.0 (service-client architecture — Phase 1+2 done)
+**Version:** `localllm` 0.2.0 (service-client architecture — Phase 1+2 done; Workstream A hardening sweep applied — see `plan.md`)
 
 ---
 
@@ -113,7 +113,8 @@ pytest -q                          # unit tests; no GPU/model required
 | v1 apps | Complete |
 | Phase 1 client SDK | **Done** — `localllm/client/` |
 | Phase 2 gateway service | **Done** — `localllm-serve`, `localllm/service/` |
-| Unit tests | **16 passed** (client, gateway, agent parser, media, secrets) |
+| Hardening sweep (plan.md Workstream A) | **Done 2026-06-10** — gateway guardrails (413/400/502/503/504, optional bearer auth), agent tool sandbox (secret denylist, extension allowlist, traversal fix), TTS fixes (no ja/ko garbage fallbacks, WAV concat preserves audio, cache keyed on use_cuda), staging cleanup, VAD threshold, STT tail-drop fix, `enable_thinking=False` code default, HF download revision pin, ruff/mypy/bandit config, CI workflow. **Deliberately skipped:** untracking `hf_token.txt` (user decision) |
+| Unit tests | **103 passed** (client, gateway + guardrails, agent parser + tool security, media, TTS, secrets) |
 | GGUF downloaded | **Yes** on dev machine — `models/gemma-4-12b-it-Q6_K.gguf` + `models/mmproj-F16.gguf` |
 | llama-server integration tested end-to-end | **Confirmed** on RTX 5060 (chat works); gateway path needs smoke test |
 | Streamlit | Fixed (launcher subprocess + no nested `launch()`) |
@@ -143,9 +144,9 @@ pytest -q                          # unit tests; no GPU/model required
 | 3 — Commercial profiles | **Next** | `LOCALLLM_PROFILE=openai`, profile YAML loader, LiteLLM optional |
 | 4 — Streaming | Planned | SSE token streaming in CLI + Streamlit |
 | 5 — Agent hardening | Planned | Native Gemma tool-call template |
-| 6 — Real-time STT (4c) | Planned | Mic capture, chunked streaming |
+| 6 — Real-time STT (4c) | Planned | Mic capture, chunked streaming — full design in `plan.md` Workstream B |
 | 7 — Integration tests | Planned | Gated on gateway + llama-server |
-| 8 — Production deploy | Planned | systemd/launchd, Docker, LAN auth |
+| 8 — Production deploy | Planned | systemd/launchd, Docker, LAN auth (gateway bearer auth now exists: `service.api_key`) |
 
 **Immediate:** smoke-test `localllm-serve` + `localllm-chat` on Mac Metal; then Phase 3 profiles.
 
@@ -156,6 +157,10 @@ pytest -q                          # unit tests; no GPU/model required
 ```yaml
 service.port: 8090                               # gateway (clients)
 service.max_concurrent_requests: 2
+service.api_key: null                            # optional bearer auth for /v1/* (set before LAN exposure)
+service.queue_timeout_sec: 30                    # wait for inference slot, then 503
+service.max_request_bytes: 67108864              # reject oversized bodies (64 MB)
+model.revision: main                             # pin to a commit hash for supply-chain safety
 llm.provider: local
 llm.base_url: http://127.0.0.1:8090/v1
 llm.model: gemma-4-12b-it

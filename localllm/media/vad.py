@@ -35,8 +35,12 @@ def _speech_mask(
     energies = _frame_energies(audio, sample_rate, frame_ms)
     if energies.size == 0:
         return np.zeros(0, dtype=bool)
+    # Adaptive threshold anchored to the noise floor (20th percentile) rather than
+    # the peak alone, so one loud transient cannot suppress quiet speech, and
+    # silence-only audio (noise floor ≈ peak) stays below the absolute threshold.
     peak = float(np.max(energies)) or 1.0
-    threshold = max(energy_threshold, peak * 0.05)
+    floor = float(np.percentile(energies, 20))
+    threshold = max(energy_threshold, min(peak * 0.05, floor * 3.0))
     return energies >= threshold
 
 
@@ -182,7 +186,12 @@ def chunk_audio_vad(
     sample_rate: int,
     config: TranslateLiveConfig | None = None,
 ) -> list[SpeechChunk]:
-    """Split audio into VAD-guided chunks with overlap (Phase 2)."""
+    """Split audio into VAD-guided chunks with overlap.
+
+    Note: the live translate UI currently uses ``chunk_audio_live`` (fixed
+    windows); this energy-based VAD is kept for experimentation and is slated
+    to be replaced by silero-vad in the streaming pipeline (plan.md, B-2).
+    """
     from localllm.config import TranslateLiveConfig as LiveCfg
 
     config = config or LiveCfg()

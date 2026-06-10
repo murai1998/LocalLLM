@@ -30,7 +30,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "bandit>=1.7",
+    "pip-audit>=2.7",
+]
 
 [project.scripts]
 localllm-chat = "apps.cli_chat:main"
@@ -49,3 +55,34 @@ include = ["localllm*", "apps*", "scripts*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["mcps", "terminals", "models"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+    "E501",  # long prompt/UI strings
+    # Whitespace-only rules disabled: enforcing them rewrote dozens of untouched
+    # files (blank lines / EOF newlines) and polluted diffs for no benefit.
+    "W291",
+    "W292",
+    "W293",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# In these files the only I001 violation is blank-line grouping — fixing it
+# would be whitespace-only diff churn.
+"localllm/agents/graph.py" = ["I001"]
+"localllm/media/images.py" = ["I001"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = true
+exclude = "(mcps|terminals|models)/"
+
+[tool.bandit]
+exclude_dirs = ["tests", "mcps", "terminals", "models", ".venv"]

@@ -7,8 +7,8 @@ from html.parser import HTMLParser
 from ipaddress import ip_address, ip_network
 from urllib.parse import unquote, urlparse
 
-import httpx
 import fitz
+import httpx
 from langchain_core.tools import tool
 
 MAX_FETCH_BYTES = 500_000

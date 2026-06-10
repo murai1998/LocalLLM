@@ -1,7 +1,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from localllm.config import AppSettings, TranslateConfig
+from localllm.config import AppSettings
 from localllm.pipelines.translate import (
     build_translate_messages,
     parse_unified_response,
