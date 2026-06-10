@@ -34,3 +34,4 @@ outputs/
 terminals/
 # Web UI (React/Vite) — dist is committed so runtime needs no Node
 webui/node_modules/
+.venv310/

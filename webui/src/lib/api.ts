@@ -64,17 +64,64 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export interface SkillInfo {
+  name: string;
+  description: string;
+}
+
+export interface UploadedAttachment {
+  id: string;
+  name: string;
+  kind: string;
+  size: number;
+}
+
+export interface AgentStep {
+  kind: "call" | "result";
+  title: string;
+  body: string;
+}
+
+export interface ChatResponse {
+  reply: string;
+  elapsed_sec: number;
+  mode: "chat" | "agent";
+  steps: AgentStep[];
+}
+
 export const api = {
   health: (): Promise<Health> => fetch("/api/health").then((r) => jsonOrThrow<Health>(r)),
 
   meta: (): Promise<Meta> => fetch("/api/meta").then((r) => jsonOrThrow<Meta>(r)),
 
-  chat: (messages: { role: string; content: string }[]) =>
+  skills: (): Promise<SkillInfo[]> =>
+    fetch("/api/skills").then((r) => jsonOrThrow<SkillInfo[]>(r)),
+
+  uploadAttachments: (files: File[]): Promise<UploadedAttachment[]> => {
+    const form = new FormData();
+    for (const f of files) form.append("files", f, f.name);
+    return fetch("/api/uploads", { method: "POST", body: form }).then((r) =>
+      jsonOrThrow<UploadedAttachment[]>(r),
+    );
+  },
+
+  deleteAttachment: (id: string): Promise<void> =>
+    fetch(`/api/uploads/${id}`, { method: "DELETE" }).then(() => undefined),
+
+  chat: (
+    messages: { role: string; content: string }[],
+    options?: { mode?: "chat" | "agent"; skills?: string[]; attachmentIds?: string[] },
+  ) =>
     fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages }),
-    }).then((r) => jsonOrThrow<{ reply: string; elapsed_sec: number }>(r)),
+      body: JSON.stringify({
+        messages,
+        mode: options?.mode ?? "chat",
+        skills: options?.skills ?? [],
+        attachment_ids: options?.attachmentIds ?? [],
+      }),
+    }).then((r) => jsonOrThrow<ChatResponse>(r)),
 
   translateText: (body: {
     transcript: string;

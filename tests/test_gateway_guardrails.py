@@ -8,8 +8,8 @@ from fastapi.testclient import TestClient
 
 from localllm.config import AppSettings
 
-# `localllm.service.__init__` rebinds the package attribute `app` to the FastAPI
-# instance, so a plain `import localllm.service.app` resolves to the wrong object.
+# Import via importlib to be robust against any future `app` attribute
+# shadowing in the `localllm.service` package (see its __init__ note).
 app_module = importlib.import_module("localllm.service.app")
 
 
