@@ -11,6 +11,11 @@ export interface Health {
     max_chunk_seconds: number;
     overlap_seconds: number;
   };
+  live_stream?: {
+    hangover_ms: number;
+    min_segment_seconds: number;
+    max_segment_seconds: number;
+  };
 }
 
 export interface Meta {

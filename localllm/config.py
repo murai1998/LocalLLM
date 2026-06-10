@@ -118,12 +118,33 @@ class TranslateLiveConfig(BaseSettings):
     energy_threshold: float = 0.01
 
 
+class TranslateStreamConfig(BaseSettings):
+    """Workstream B — streaming voice-to-voice endpointing and pipeline."""
+
+    frame_ms: int = 30
+    # Trailing silence that ends a speech segment.
+    hangover_ms: int = 600
+    # Audio kept from before speech onset so word starts aren't clipped.
+    pre_roll_ms: int = 300
+    # Segments shorter than this are treated as noise blips and dropped.
+    min_segment_seconds: float = 1.2
+    # Hard cut for continuous speech (Gemma audio limit is 30 s).
+    max_segment_seconds: float = 12.0
+    # Absolute RMS floor; adaptive threshold never goes below this.
+    energy_threshold: float = 0.0035
+    # On flush (stream end), emit a trailing segment if at least this long.
+    min_flush_seconds: float = 0.5
+    # Pad very short segments up to this length before STT.
+    stt_pad_seconds: float = 2.0
+
+
 class TranslateConfig(BaseSettings):
     source_language: str | None = None
     target_language: str = "es"
     max_tokens: int = 1024
     pipeline: str = "split"  # split | unified
     live: TranslateLiveConfig = Field(default_factory=TranslateLiveConfig)
+    stream: TranslateStreamConfig = Field(default_factory=TranslateStreamConfig)
 
 
 class TtsConfig(BaseSettings):

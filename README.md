@@ -111,10 +111,16 @@ pytest -q                         # unit tests; no GPU or model required
 ```
 
 The **web UI** (`localllm-webui`) is a React single-page app served as a prebuilt static
-bundle — no Node required at runtime. It covers chat, voice translation (microphone or
-file, with live per-chunk progress and spoken output), batch transcription, document OCR,
-and a status dashboard. Rebuild after frontend changes with `cd webui && npm install &&
-npm run build`. The Streamlit apps remain available.
+bundle — no Node required at runtime. It covers chat (with an agent mode, selectable
+skills, and multi-file attachments), **streaming voice-to-voice translation** (speak
+continuously — silence-aware segmentation feeds a pipelined STT → translate → TTS
+session and the translated voice plays a few seconds behind you), batch transcription,
+document OCR, and a status dashboard. Rebuild after frontend changes with
+`cd webui && npm install && npm run build`. The Streamlit apps remain available.
+
+Benchmark the live pipeline against the ≤ 8 s lag target with
+`localllm-live-bench recording.wav --target en` (add `--fake` to test the plumbing
+without a GPU).
 
 ## Why it matters
 

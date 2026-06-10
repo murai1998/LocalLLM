@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from localllm.backends.llama_server import LlamaServerManager
 from localllm.config import AppSettings, get_settings
@@ -152,12 +152,49 @@ async def chat_completions(request: Request) -> Response:
             error_type="server_busy",
         )
 
+    url = f"{_llama_base_url()}/v1/chat/completions"
+
+    if body.get("stream"):
+        # SSE pass-through: hold the inference slot for the lifetime of the
+        # stream and release it when the relay generator closes.
+        client = httpx.AsyncClient(timeout=settings.llm.timeout_sec)
+        try:
+            upstream = await client.send(
+                client.build_request("POST", url, json=body), stream=True
+            )
+        except httpx.TimeoutException:
+            await client.aclose()
+            lock.release()
+            return _error_response(
+                504, "Inference backend timed out.", error_type="upstream_timeout"
+            )
+        except httpx.HTTPError as exc:
+            await client.aclose()
+            lock.release()
+            return _error_response(
+                502,
+                f"Inference backend is unavailable: {exc.__class__.__name__}",
+                error_type="upstream_error",
+            )
+
+        async def relay():
+            try:
+                async for chunk in upstream.aiter_raw():
+                    yield chunk
+            finally:
+                await upstream.aclose()
+                await client.aclose()
+                lock.release()
+
+        return StreamingResponse(
+            relay(),
+            status_code=upstream.status_code,
+            media_type=upstream.headers.get("content-type", "text/event-stream"),
+        )
+
     try:
         async with httpx.AsyncClient(timeout=settings.llm.timeout_sec) as client:
-            upstream = await client.post(
-                f"{_llama_base_url()}/v1/chat/completions",
-                json=body,
-            )
+            upstream = await client.post(url, json=body)
     except httpx.TimeoutException:
         return _error_response(
             504, "Inference backend timed out.", error_type="upstream_timeout"

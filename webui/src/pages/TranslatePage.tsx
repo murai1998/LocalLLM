@@ -1,5 +1,6 @@
 import { ArrowRight, Play, RefreshCw, Upload } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { LiveTranslate } from "../components/LiveTranslate";
 import { Recorder, type Recording } from "../components/Recorder";
 import {
   Badge,
@@ -21,10 +22,10 @@ import {
   type ResultEvent,
 } from "../lib/api";
 
-type InputMode = "record" | "upload";
+type InputMode = "live" | "record" | "upload";
 
 export function TranslatePage({ meta, health }: { meta: Meta | null; health: Health | null }) {
-  const [mode, setMode] = useState<InputMode>("record");
+  const [mode, setMode] = useState<InputMode>("live");
   const [recording, setRecording] = useState<Recording | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
 
@@ -150,8 +151,8 @@ export function TranslatePage({ meta, health }: { meta: Meta | null; health: Hea
       <header className="fade-up">
         <h1 className="text-xl font-semibold">Voice Translator</h1>
         <p className="mt-1 text-sm text-ink-dim">
-          Speak or upload audio — Gemma transcribes and translates locally, Piper speaks the
-          result. Nothing leaves this machine.
+          Speak live, record, or upload — Gemma transcribes and translates locally, Piper speaks
+          the result a few seconds behind you. Nothing leaves this machine.
         </p>
       </header>
 
@@ -203,7 +204,7 @@ export function TranslatePage({ meta, health }: { meta: Meta | null; health: Hea
         </div>
 
         <div className="mt-5 flex items-center gap-1 rounded-lg bg-panel-2 p-1 w-fit">
-          {(["record", "upload"] as InputMode[]).map((m) => (
+          {(["live", "record", "upload"] as InputMode[]).map((m) => (
             <button
               key={m}
               onClick={() => setMode(m)}
@@ -212,52 +213,74 @@ export function TranslatePage({ meta, health }: { meta: Meta | null; health: Hea
                 mode === m ? "bg-accent/20 text-accent" : "text-ink-dim hover:text-ink",
               )}
             >
-              {m === "record" ? "Microphone" : "Upload file"}
+              {m === "live" ? "Live" : m === "record" ? "Microphone" : "Upload file"}
             </button>
           ))}
         </div>
 
-        <div className="mt-4">
-          {mode === "record" ? (
-            <Recorder recording={recording} onChange={setRecording} disabled={busy} />
-          ) : (
-            <label className="flex w-fit cursor-pointer items-center gap-3 rounded-lg border border-dashed border-edge-2 px-5 py-3 text-sm text-ink-dim transition-colors hover:border-accent/50 hover:text-ink">
-              <Upload className="size-4" />
-              {uploadFile ? uploadFile.name : "Choose audio (wav, mp3, m4a, ogg, webm…)"}
-              <input
-                type="file"
-                accept=".wav,.mp3,.m4a,.ogg,.flac,.webm,.aac,audio/*"
-                className="hidden"
-                onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
-          )}
-        </div>
-
-        <div className="mt-5 flex flex-wrap items-center gap-4">
-          <Button onClick={run} busy={busy} disabled={!audioSource || health?.gateway_ready === false}>
-            Translate
-            <ArrowRight className="size-4" />
-          </Button>
-          {transcript && (
-            <Button variant="secondary" onClick={retranslate} disabled={busy}>
-              <RefreshCw className="size-4" />
-              Re-translate
-            </Button>
-          )}
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-dim">
-            <input
-              type="checkbox"
-              checked={autoSpeak}
-              onChange={(e) => setAutoSpeak(e.target.checked)}
-              className="size-4 accent-(--color-accent)"
+        {mode === "live" && (
+          <div className="mt-4">
+            <LiveTranslate
+              sourceLang={sourceLang}
+              targetLang={effectiveTarget}
+              tone={tone}
+              voiceId={voiceId ?? voices[0]?.id ?? null}
+              ttsSupported={ttsSupported}
+              gatewayReady={health?.gateway_ready}
             />
-            Speak translation automatically
-          </label>
-          {health?.gateway_ready === false && (
-            <Badge tone="warn">Gateway offline — start localllm-serve</Badge>
-          )}
-        </div>
+            {health?.gateway_ready === false && (
+              <div className="mt-3">
+                <Badge tone="warn">Gateway offline — start localllm-serve</Badge>
+              </div>
+            )}
+          </div>
+        )}
+
+        {mode !== "live" && (
+          <div className="mt-4">
+            {mode === "record" ? (
+              <Recorder recording={recording} onChange={setRecording} disabled={busy} />
+            ) : (
+              <label className="flex w-fit cursor-pointer items-center gap-3 rounded-lg border border-dashed border-edge-2 px-5 py-3 text-sm text-ink-dim transition-colors hover:border-accent/50 hover:text-ink">
+                <Upload className="size-4" />
+                {uploadFile ? uploadFile.name : "Choose audio (wav, mp3, m4a, ogg, webm…)"}
+                <input
+                  type="file"
+                  accept=".wav,.mp3,.m4a,.ogg,.flac,.webm,.aac,audio/*"
+                  className="hidden"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            )}
+          </div>
+        )}
+
+        {mode !== "live" && (
+          <div className="mt-5 flex flex-wrap items-center gap-4">
+            <Button onClick={run} busy={busy} disabled={!audioSource || health?.gateway_ready === false}>
+              Translate
+              <ArrowRight className="size-4" />
+            </Button>
+            {transcript && (
+              <Button variant="secondary" onClick={retranslate} disabled={busy}>
+                <RefreshCw className="size-4" />
+                Re-translate
+              </Button>
+            )}
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-dim">
+              <input
+                type="checkbox"
+                checked={autoSpeak}
+                onChange={(e) => setAutoSpeak(e.target.checked)}
+                className="size-4 accent-(--color-accent)"
+              />
+              Speak translation automatically
+            </label>
+            {health?.gateway_ready === false && (
+              <Badge tone="warn">Gateway offline — start localllm-serve</Badge>
+            )}
+          </div>
+        )}
 
         {progress && (
           <div className="mt-5">

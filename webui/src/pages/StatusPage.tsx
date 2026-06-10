@@ -100,14 +100,27 @@ export function StatusPage({ health }: { health: Health | null }) {
         <Card
           title={
             <span className="flex items-center gap-2">
-              <Radio className="size-4 text-accent" /> Coming next
+              <Radio className="size-4 text-accent" /> Live voice-to-voice
             </span>
           }
         >
-          <p className="text-sm leading-relaxed text-ink-dim">
-            Streaming voice-to-voice translation: continuous microphone capture, silence-aware
-            segmentation, and pipelined STT → translate → TTS with a 5–8&nbsp;s steady-state lag.
-            The microphone plumbing on the Translate page is the foundation for it.
+          {health && (
+            <>
+              <Row
+                label="Segment ends after"
+                value={`${(health.live_stream?.hangover_ms ?? 600) / 1000} s silence`}
+              />
+              <Row
+                label="Segment length"
+                value={`${health.live_stream?.min_segment_seconds ?? 1.2}–${health.live_stream?.max_segment_seconds ?? 12} s`}
+              />
+              <Row label="Target lag" value={<Badge tone="good">≤ 8 s behind speaker</Badge>} />
+            </>
+          )}
+          <p className="mt-3 text-xs leading-relaxed text-ink-faint">
+            Translate → Live: continuous microphone capture, silence-aware segmentation, and a
+            pipelined STT → translate → TTS session. Benchmark offline with
+            <code className="mx-1">localllm-live-bench</code>.
           </p>
         </Card>
       </div>

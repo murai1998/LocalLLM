@@ -55,6 +55,23 @@ Findings from a code audit, ordered by severity. Each one should become a fix + 
 
 ## Workstream B — Streaming voice-to-voice translation (the holy grail)
 
+> **Status (2026-06-10): EXECUTED** —
+> **B-1** gateway SSE pass-through (`stream: true` relays chunks, slot released on
+> stream close). **B-2** `localllm/live/endpointer.py`: silence-aware streaming
+> endpointer (adaptive noise floor, 600 ms hangover, blip rejection, 12 s force-cut,
+> pre-roll; silero-vad can replace `_is_speech` later). **B-3**
+> `localllm/live/pipeline.py`: pipelined STT → MT → TTS asyncio workers with rolling
+> 2-segment MT context and injectable stages — stage overlap is asserted by test.
+> **B-4** `/ws/translate` WebSocket (Int16 PCM in, JSON events out) +
+> `localllm-live-bench` harness (real-time WAV replay, per-stage latency + lag report;
+> `--fake` runs without GPU). **B-5** browser Live mode on the Translate page:
+> AudioWorklet capture → WS, buffered Web Audio playback, half-duplex mic gating
+> (headphones toggle), live bilingual transcript with per-stage timing and lag badges.
+> 20 new tests (endpointer/pipeline/WS/SSE). **Remaining (B-6, optional):** silero-vad
+> backend, boundary dedup, faster-whisper STT fallback — quality passes once real-GPU
+> bench numbers are in. Validate on hardware with:
+> `localllm-serve` + `localllm-live-bench your_speech.wav --target en`
+
 **Goal:** continuous microphone input → segment → transcribe (Gemma audio) → translate (Gemma) → synthesize (Piper) → speak, all local, with the translated voice trailing the speaker by a few seconds.
 
 ### Why the current stack can't do it yet

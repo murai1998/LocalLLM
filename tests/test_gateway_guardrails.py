@@ -149,3 +149,53 @@ def test_health_does_not_require_api_key(gateway):
     client = TestClient(gateway.app)
     response = client.get("/health")
     assert response.status_code == 200
+
+
+def test_stream_true_relays_sse_chunks(gateway):
+    sse_chunks = [b'data: {"delta":"hel"}\n\n', b'data: {"delta":"lo"}\n\n', b"data: [DONE]\n\n"]
+
+    async def aiter_raw():
+        for chunk in sse_chunks:
+            yield chunk
+
+    upstream = MagicMock()
+    upstream.status_code = 200
+    upstream.headers = {"content-type": "text/event-stream"}
+    upstream.aiter_raw = aiter_raw
+    upstream.aclose = AsyncMock()
+
+    with patch("httpx.AsyncClient") as client_cls:
+        instance = client_cls.return_value
+        instance.build_request = MagicMock(return_value="req")
+        instance.send = AsyncMock(return_value=upstream)
+        instance.aclose = AsyncMock()
+
+        client = TestClient(gateway.app)
+        response = client.post(
+            "/v1/chat/completions",
+            json={"messages": [{"role": "user", "content": "hi"}], "stream": True},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.content == b"".join(sse_chunks)
+    upstream.aclose.assert_awaited()
+    # The inference slot must be free again after the stream ends.
+    assert gateway._inference_lock.locked() is False
+
+
+def test_stream_upstream_failure_returns_502_and_releases_slot(gateway):
+    with patch("httpx.AsyncClient") as client_cls:
+        instance = client_cls.return_value
+        instance.build_request = MagicMock(return_value="req")
+        instance.send = AsyncMock(side_effect=httpx.ConnectError("refused"))
+        instance.aclose = AsyncMock()
+
+        client = TestClient(gateway.app)
+        response = client.post(
+            "/v1/chat/completions",
+            json={"messages": [{"role": "user", "content": "hi"}], "stream": True},
+        )
+
+    assert response.status_code == 502
+    assert gateway._inference_lock.locked() is False

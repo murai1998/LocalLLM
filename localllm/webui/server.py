@@ -18,7 +18,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, Form, HTTPException, UploadFile
+import numpy as np
+from fastapi import (
+    FastAPI,
+    Form,
+    HTTPException,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -26,6 +34,7 @@ from pydantic import BaseModel, Field
 from localllm.client.factory import create_llm_client
 from localllm.config import ROOT, get_settings
 from localllm.devices.resolver import detect_platform
+from localllm.live import LiveTranslateSession, StreamingEndpointer
 from localllm.media.attachments import (
     AGENT_ALLOWED,
     CHAT_ALLOWED,
@@ -254,6 +263,11 @@ def create_app() -> FastAPI:
                 "min_chunk_seconds": settings.translate.live.min_chunk_seconds,
                 "max_chunk_seconds": settings.translate.live.max_chunk_seconds,
                 "overlap_seconds": settings.translate.live.overlap_seconds,
+            },
+            "live_stream": {
+                "hangover_ms": settings.translate.stream.hangover_ms,
+                "min_segment_seconds": settings.translate.stream.min_segment_seconds,
+                "max_segment_seconds": settings.translate.stream.max_segment_seconds,
             },
         }
 
@@ -540,6 +554,76 @@ def create_app() -> FastAPI:
             doc_path.unlink(missing_ok=True)
         result["elapsed_sec"] = time.perf_counter() - started
         return result
+
+    @app.websocket("/ws/translate")
+    async def ws_translate(ws: WebSocket) -> None:
+        """Streaming voice-to-voice translation (plan.md Workstream B).
+
+        Protocol — client sends a JSON `start` message, then binary frames of
+        16 kHz mono **Int16 LE** PCM, then a JSON `stop`. Server emits JSON
+        events: segment / transcript / translation / audio (base64 WAV) /
+        error / done.
+        """
+        await ws.accept()
+        settings = get_settings()
+        try:
+            start = await ws.receive_json()
+        except (WebSocketDisconnect, ValueError):
+            await ws.close(code=1003)
+            return
+        if start.get("type") != "start":
+            await ws.send_json({"type": "error", "message": "First message must be 'start'."})
+            await ws.close(code=1003)
+            return
+
+        sample_rate = int(start.get("sample_rate") or 16000)
+        source_lang = (start.get("source_lang") or "").strip() or None
+        target_lang = (start.get("target_lang") or settings.translate.target_language).strip()
+        tone = (start.get("tone") or "professional").strip()
+        voice_id = (start.get("voice_id") or "").strip() or None
+
+        endpointer = StreamingEndpointer(sample_rate, settings.translate.stream)
+        session = LiveTranslateSession(
+            source_lang=source_lang,
+            target_lang=target_lang,
+            tone=tone,
+            voice_id=voice_id,
+            settings=settings,
+            llm_client=_client(),
+            on_event=ws.send_json,
+        )
+        await session.start()
+
+        async def submit(segment) -> None:
+            await session.submit(
+                segment.audio, sample_rate=sample_rate, start_sample=segment.start_sample
+            )
+
+        try:
+            while True:
+                message = await ws.receive()
+                if message.get("type") == "websocket.disconnect":
+                    raise WebSocketDisconnect(message.get("code") or 1000)
+                if message.get("bytes") is not None:
+                    pcm = np.frombuffer(message["bytes"], dtype="<i2")
+                    samples = pcm.astype(np.float32) / 32768.0
+                    for segment in endpointer.feed(samples):
+                        await submit(segment)
+                elif message.get("text") is not None:
+                    try:
+                        payload = json.loads(message["text"])
+                    except json.JSONDecodeError:
+                        continue
+                    if payload.get("type") == "stop":
+                        tail = endpointer.flush()
+                        if tail is not None:
+                            await submit(tail)
+                        await session.finish()
+                        break
+        except WebSocketDisconnect:
+            await session.abort()
+            return
+        await ws.close()
 
     # --- Static SPA bundle ---
     if DIST_DIR.is_dir():
