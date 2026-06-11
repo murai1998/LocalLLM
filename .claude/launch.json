@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "webui",
-      "runtimeExecutable": "python",
+      "runtimeExecutable": ".venv/bin/python",
       "runtimeArgs": ["-m", "uvicorn", "localllm.webui.server:app", "--host", "127.0.0.1", "--port", "8095"],
       "port": 8095
     }

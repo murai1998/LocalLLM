@@ -52,7 +52,9 @@ Real-time microphone STT is **not** implemented (deferred).
 - Python 3.10+
 - [llama.cpp](https://github.com/ggml-org/llama.cpp/releases) with **`llama-server`** on your `PATH`
   - **CUDA build** for Windows / Linux with NVIDIA GPU (e.g. RTX 5060 16GB)
-  - **Metal build** for macOS Apple Silicon (MacBook Pro)
+  - **Metal build** for macOS Apple Silicon (MacBook Pro) — `brew install llama.cpp`
+  - Must be **build ≥ 9590** (older builds reject the Gemma 4 multimodal projector
+    with `unknown projector type: gemma4uv`); on macOS run `brew upgrade llama.cpp`
 - Hugging Face access to Gemma 4 (token in `hf_token.txt` or `HF_TOKEN` env)
 - ~10 GB disk for `gemma-4-12b-it-Q6_K.gguf` + mmproj
 
@@ -266,6 +268,9 @@ models/            # Downloaded GGUF (gitignored)
 | Issue | Fix |
 |-------|-----|
 | `llama-server not found` | Install llama.cpp; add `llama-server` to PATH (CUDA or Metal build) |
+| `unknown projector type: gemma4uv` | llama-server too old for the Gemma 4 mmproj — update to build ≥ 9590 (`brew upgrade llama.cpp` on macOS) |
+| Web UI returns 503 / "bundle not found" | `webui/dist` missing — `cd webui && npm install && npm run build` |
+| Stale process holding a stack port | `./scripts/stop_stale_ports.sh` (macOS/Linux) or `.\scripts\stop_stale_ports.ps1` (Windows) |
 | Gateway timeout | First model load can take minutes; increase `service.startup_timeout_sec` |
 | Empty assistant reply | Set `enable_thinking: false` (already default) |
 | CUDA OOM on 16 GB | Lower `llama_server.n_gpu_layers` |

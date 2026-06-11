@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import platform
 import socket
 import sys
 
@@ -27,10 +28,14 @@ def main() -> None:
     args = parser.parse_args()
 
     if not _port_is_free(args.host, args.port):
+        if platform.system() == "Windows":
+            free_cmd = f"  .\\scripts\\stop_stale_ports.ps1 -Ports {args.port}"
+        else:
+            free_cmd = f"  ./scripts/stop_stale_ports.sh {args.port}"
         print(
             f"ERROR: port {args.port} is already in use — a previous web UI (or another\n"
             "process) is still listening. Free it with:\n\n"
-            f"  .\\scripts\\stop_stale_ports.ps1 -Ports {args.port}\n\n"
+            f"{free_cmd}\n\n"
             f"or start on another port:  localllm-webui --port {args.port + 1}",
             file=sys.stderr,
         )

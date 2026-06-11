@@ -7,8 +7,9 @@ venv/
 env/
 .env
 *.egg-info/
-dist/
-build/
+# Root-anchored so webui/dist (committed — see bottom) is not ignored
+/dist/
+/build/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
