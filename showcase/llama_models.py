@@ -317,9 +317,10 @@ def transcribe_file(audio: np.ndarray, sample_rate: int, source_lang: str | None
 
 
 def translate_text(text: str, source_lang: str | None, target_lang: str, tone: str) -> str:
+    # 2048: also serves OCR-page translation, which can exceed 1024 tokens.
     return _chat(
         build_translate_messages(text, source_lang=source_lang, target_lang=target_lang, tone=tone),
-        max_tokens=1024,
+        max_tokens=2048,
     )
 
 

@@ -57,6 +57,16 @@ VOICE_OPTIONS: Final[dict[str, list[dict[str, str]]]] = {
     "ar": [
         {"id": "ar_kareem", "label": "Kareem", "voice": "ar_JO-kareem-medium"},
     ],
+    "nl": [
+        {"id": "nl_pim", "label": "Pim (Netherlands, male)", "voice": "nl_NL-pim-medium"},
+        {"id": "nl_ronnie", "label": "Ronnie (Netherlands)", "voice": "nl_NL-ronnie-medium"},
+        {"id": "nl_nathalie", "label": "Nathalie (Belgium, female)", "voice": "nl_BE-nathalie-medium"},
+    ],
+    "uk": [
+        {"id": "uk_ukrainian", "label": "Ukrainian TTS (neutral)", "voice": "uk_UA-ukrainian_tts-medium"},
+        {"id": "uk_tetiana", "label": "Tetiana (female, high quality)", "voice": "uk_UA-tetiana-high"},
+        {"id": "uk_mykyta", "label": "Mykyta (male, high quality)", "voice": "uk_UA-mykyta-high"},
+    ],
 }
 # No Piper voices exist for ja/ko; cross-language fallbacks produce gibberish,
 # so those languages report tts_supported() == False instead.

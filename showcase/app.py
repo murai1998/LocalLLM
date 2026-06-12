@@ -93,7 +93,10 @@ def _tts_at_output_rate(text: str, *, language: str, voice_id: str | None):
 
 
 def _voice_choices(lang_code: str) -> list[tuple[str, str]]:
-    return [(o["label"], o["id"]) for o in piper_voices.voice_options_for_language(lang_code)]
+    """Voice options for a language; an explicit placeholder when none exist
+    (e.g. Japanese/Korean have no Piper voice) so the dropdown is never blank."""
+    options = [(o["label"], o["id"]) for o in piper_voices.voice_options_for_language(lang_code)]
+    return options or [("No TTS voice — text only", "")]
 
 
 # Pause detection: a window of `audio_chunk_duration` seconds with less than
@@ -117,7 +120,18 @@ def _make_live_handler():
 class StatefulReplyOnPause(ReplyOnPause):
     """fastrtc clones the handler per WebRTC connection via copy(); build a NEW
     reply closure for each clone so every visitor gets their own history
-    (a shared closure would interleave conversations across visitors)."""
+    (a shared closure would interleave conversations across visitors).
+
+    can_interrupt=False: with barge-in enabled (the fastrtc default), every
+    detected pause clears the playback queue and kills the running reply — TTS
+    echo picked up by the mic registers as speech, the next quiet moment as a
+    pause, and the translation audio is cut off or never heard at all. An
+    interpreter should finish speaking; the mic is simply ignored meanwhile.
+    """
+
+    def __init__(self, fn, **kwargs):
+        kwargs.setdefault("can_interrupt", False)
+        super().__init__(fn, **kwargs)
 
     def copy(self):
         return StatefulReplyOnPause(
@@ -253,15 +267,22 @@ def build_batch_tab() -> None:
         "Upload or record audio for one-shot transcription and translation with a "
         "spoken result."
     )
-    audio = gr.Audio(sources=["upload", "microphone"], type="numpy", label="Audio")
+    # elem_id + CSS min-height keep the layout pinned: the record view of
+    # gr.Audio is taller than the upload view and otherwise reflows the page
+    # the moment the mic icon is clicked.
+    audio = gr.Audio(
+        sources=["upload", "microphone"], type="numpy", label="Audio",
+        elem_id="batch-audio",
+    )
     with gr.Row():
         source = gr.Dropdown([("Auto-detect", "")] + LANG_CHOICES, value="", label="Language")
         do_translate = gr.Checkbox(value=True, label="Also translate")
         target = gr.Dropdown(LANG_CHOICES, value="en", label="To")
         tone = gr.Dropdown(TONE_CHOICES, value=DEFAULT_TONE, label="Tone")
     run = gr.Button("Transcribe", variant="primary")
-    transcript = gr.Textbox(label="Transcript", lines=6)
-    translation = gr.Textbox(label="Translation", lines=6)
+    with gr.Row():
+        transcript = gr.Textbox(label="Transcript", lines=8)
+        translation = gr.Textbox(label="Translation", lines=8)
     speech = gr.Audio(label="Spoken translation", interactive=False)
     run.click(
         _batch_run,
@@ -274,7 +295,7 @@ def build_batch_tab() -> None:
 
 
 @friendly_errors
-def _ocr_run(file, instructions: str):
+def _ocr_run(file, instructions: str, do_translate: bool, target_lang: str):
     if file is None:
         raise gr.Error("Upload an image or PDF first.")
     from PIL import Image
@@ -292,7 +313,11 @@ def _ocr_run(file, instructions: str):
             gr.Info(f"Demo limit: first {MAX_OCR_PAGES} pages only (full version: unlimited).")
     else:
         images = [Image.open(path).convert("RGB")]
-    return models.ocr_images(images, instructions or "")
+    extracted = models.ocr_images(images, instructions or "")
+    translation = ""
+    if do_translate and extracted.strip():
+        translation = models.translate_text(extracted, None, target_lang, "exact")
+    return extracted, translation
 
 
 def build_ocr_tab() -> None:
@@ -306,9 +331,18 @@ def build_ocr_tab() -> None:
         label="Instructions (optional)",
         placeholder="e.g. extract only the table of line items",
     )
+    with gr.Row():
+        do_translate = gr.Checkbox(value=True, label="Also translate")
+        target = gr.Dropdown(LANG_CHOICES, value="en", label="Translate to")
     run = gr.Button("Extract text", variant="primary")
-    output = gr.Textbox(label="Extracted text", lines=16, show_copy_button=True)
-    run.click(_ocr_run, inputs=[file, instructions], outputs=[output])
+    with gr.Row():
+        output = gr.Textbox(label="Extracted text (original)", lines=16, show_copy_button=True)
+        translated = gr.Textbox(label="Translation", lines=16, show_copy_button=True)
+    run.click(
+        _ocr_run,
+        inputs=[file, instructions, do_translate, target],
+        outputs=[output, translated],
+    )
 
 
 # --- App --------------------------------------------------------------------
@@ -319,6 +353,9 @@ CSS = """
 #chat-image [data-testid="block-label"] { z-index: 2; }
 #chat-image .wrap { font-size: 13px; line-height: 1.3; gap: 4px; }
 #chat-image .wrap .or { margin: 0; }
+/* gr.Audio's upload view (280px) and record view (215px) differ in height;
+   reserve the larger of the two so toggling the mic never reflows the tab. */
+#batch-audio { min-height: 280px; }
 """
 
 with gr.Blocks(

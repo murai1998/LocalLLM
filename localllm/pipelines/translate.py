@@ -32,6 +32,8 @@ LANGUAGE_LABELS: dict[str, str] = {
     "it": "Italian",
     "ko": "Korean",
     "ar": "Arabic",
+    "nl": "Dutch",
+    "uk": "Ukrainian",
 }
 
 TONE_PRESETS: Final[dict[ToneId, dict[str, str]]] = {
