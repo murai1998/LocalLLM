@@ -46,6 +46,10 @@ elif BACKEND == "llama":
 else:
     import models
 
+# Mermaid diagrams in the comparison page render on GitHub (not in HF's blob
+# viewer), so the banner links to the GitHub copy of the file.
+COMPARISON_URL = f"{GITHUB_URL}/blob/main/showcase/COMPARISON.md"
+
 OUTPUT_RATE = 22050
 MAX_OCR_PAGES = 3
 
@@ -61,7 +65,9 @@ DEMO_BANNER = f"""
   suite with llama.cpp Q6_K inference, an OpenAI-compatible gateway, a tool-using agent,
   a React web UI, and true streaming voice-to-voice translation (≤ 8 s lag) — runs on
   your own GPU with <em>no quotas and no data leaving your machine</em>:<br>
-  👉 <a href="{GITHUB_URL}" target="_blank"><strong>{GITHUB_URL}</strong></a>
+  👉 <a href="{GITHUB_URL}" target="_blank"><strong>{GITHUB_URL}</strong></a> ·
+  <a href="{COMPARISON_URL}" target="_blank">demo vs. full version — 1-page comparison with
+  architecture diagrams</a>
 </div>
 """
 

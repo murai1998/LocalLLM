@@ -95,8 +95,7 @@ def test_friendly_errors_preserves_generator_functions():
 
     @zerogpu.friendly_errors
     def streamer(n):
-        for i in range(n):
-            yield i
+        yield from range(n)
 
     assert inspect.isgeneratorfunction(streamer)
     assert list(streamer(3)) == [0, 1, 2]

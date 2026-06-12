@@ -50,6 +50,9 @@ the [GitHub repo](https://github.com/murai1998/LocalLLM).
 
 ## Architecture (demo vs. full)
 
+> 📊 Full side-by-side comparison with architecture diagrams:
+> [COMPARISON.md](https://github.com/murai1998/LocalLLM/blob/main/showcase/COMPARISON.md)
+
 | | This Space (ZeroGPU) | Full local app |
 |---|---|---|
 | LLM | Gemma 12B bf16 via transformers, per-call GPU | Gemma 12B **Q6_K GGUF** via llama.cpp, resident |

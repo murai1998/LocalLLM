@@ -40,7 +40,7 @@ def is_degenerate(text: str, *, max_run: int = 6) -> bool:
     if len(words) < max_run:
         return False
     run = best = 1
-    for prev, cur in zip(words, words[1:]):
+    for prev, cur in zip(words, words[1:], strict=False):
         run = run + 1 if cur == prev else 1
         best = max(best, run)
     if best >= max_run:
