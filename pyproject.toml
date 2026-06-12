@@ -37,6 +37,12 @@ dev = [
     "bandit>=1.7",
     "pip-audit>=2.7",
 ]
+# UI/runtime deps of the HF Spaces showcase (showcase/ has its own
+# requirements.txt for the Space itself; this extra is for local tests).
+showcase = [
+    "gradio>=5.50",
+    "fastrtc[vad]>=0.0.34",
+]
 
 [project.scripts]
 localllm-chat = "apps.cli_chat:main"

@@ -122,6 +122,12 @@ Benchmark the live pipeline against the ≤ 8 s lag target with
 `localllm-live-bench recording.wav --target en` (add `--fake` to test the plumbing
 without a GPU).
 
+**Online demo:** a reduced-capability showcase for Hugging Face Spaces (ZeroGPU) lives in
+[`showcase/`](showcase/) — see [showcase-plan.md](showcase-plan.md) for the constraints it
+runs under and exact publishing steps. The demo deliberately points back here: the full
+experience (llama.cpp, gateway, agent, React UI, streaming voice-to-voice) only runs
+locally.
+
 ## Why it matters
 
 LocalLLM proves the ability to take a raw open-weights model and turn it into a **production-

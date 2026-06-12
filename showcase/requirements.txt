@@ -1,0 +1,17 @@
+# LocalLLM showcase — ZeroGPU Space dependencies (transformers backend).
+# gradio itself is provided by the Space SDK (pinned via sdk_version in README.md).
+#
+# NOTE: locally you do NOT need any of the torch block — the local backend is
+# llama.cpp (SHOWCASE_BACKEND=llama, the default off-Spaces), which only needs
+# the bottom section plus a llama-server binary on PATH. See README.md.
+torch==2.11.0
+torchvision  # required by Gemma4Processor (vision tower preprocessing)
+transformers>=5.11,<6
+accelerate>=1.0          # required for quantized / device_map model loading
+bitsandbytes>=0.47       # 4-bit NF4 quantization for the "small" preset (CUDA-only)
+spaces
+fastrtc[vad]==0.0.34
+piper-tts>=1.2
+pymupdf>=1.24          # PDF → page images for the OCR tab (imported as `fitz`)
+pillow>=10            # PIL.Image — OCR page handling in app.py
+numpy>=1.26

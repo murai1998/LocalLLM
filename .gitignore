@@ -16,6 +16,7 @@ env/
 
 # Secrets and local tokens
 .env.local
+secrets/
 
 # Downloaded models
 models/
@@ -36,3 +37,4 @@ terminals/
 # Web UI (React/Vite) — dist is committed so runtime needs no Node
 webui/node_modules/
 .venv310/
+showcase/voices/
