@@ -8,6 +8,7 @@ https://github.com/murai1998/LocalLLM
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 import gradio as gr
@@ -115,6 +116,42 @@ LIVE_VAD = AlgoOptions(
     speech_threshold=0.15,
 )
 
+# A browser can't reach a cloud Space's media ports directly — WebRTC needs a
+# TURN relay. fastrtc's default helper, when HF_TOKEN is set, *always* fetches
+# from the free HF community relay (turn.fastrtc.org) and ignores any Cloudflare
+# keys; that host has intermittent DNS/availability failures (the "Temporary
+# failure in name resolution" popup). Prefer the user's own Cloudflare TURN keys
+# (direct to the stable rtc.live.cloudflare.com), retry the community relay a few
+# times, and surface a clear setup message instead of a raw DNS error.
+_CF_KEY_ID = os.environ.get("CLOUDFLARE_TURN_KEY_ID")
+_CF_KEY_TOKEN = os.environ.get("CLOUDFLARE_TURN_KEY_API_TOKEN")
+
+
+async def _turn_credentials():
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        try:
+            if _CF_KEY_ID and _CF_KEY_TOKEN:
+                # hf_token="" forces the direct-Cloudflare path (an HF_TOKEN in
+                # the env would otherwise win and route to turn.fastrtc.org).
+                return await get_cloudflare_turn_credentials_async(
+                    turn_key_id=_CF_KEY_ID,
+                    turn_key_api_token=_CF_KEY_TOKEN,
+                    hf_token="",
+                )
+            return await get_cloudflare_turn_credentials_async()
+        except Exception as exc:  # noqa: BLE001 — retry any fetch/DNS failure
+            last_exc = exc
+            await asyncio.sleep(0.5 * (attempt + 1))
+    name = last_exc.__class__.__name__ if last_exc else "error"
+    raise gr.Error(
+        "Couldn't reach a WebRTC TURN relay for the Live interpreter "
+        f"({name}). For a reliable relay, add free Cloudflare TURN keys as Space "
+        "secrets (CLOUDFLARE_TURN_KEY_ID + CLOUDFLARE_TURN_KEY_API_TOKEN); "
+        "otherwise retry — the free HF relay is sometimes briefly unavailable. "
+        "The other tabs don't need this."
+    )
+
 
 def _make_live_handler():
     """Fresh reply closure — each one owns a private rolling transcript."""
@@ -181,7 +218,7 @@ def build_interpreter_tab() -> None:
         # fastrtc defaults to full_screen=True, which overlays the whole page
         # with a click-swallowing container and freezes the rest of the UI.
         full_screen=False,
-        rtc_configuration=get_cloudflare_turn_credentials_async if ON_SPACES else None,
+        rtc_configuration=_turn_credentials if ON_SPACES else None,
     )
     with gr.Row():
         transcript_src = gr.Textbox(label="🗣 Transcript", lines=12, interactive=False)

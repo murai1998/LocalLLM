@@ -116,6 +116,46 @@ _generate_lock = threading.Lock()
 # OCR stay pure-greedy so legitimately repeated text (tables, code) is preserved.
 _ANTI_REPEAT = {"repetition_penalty": 1.3, "no_repeat_ngram_size": 3}
 
+# Whisper's feature extractor expects 16 kHz. The transformers ASR pipeline can
+# resample mismatched rates itself, but only via torchaudio — which isn't
+# installed on the Space (and pinning it risks a torch-version clash on ZeroGPU).
+# Resampling here with numpy means the pipeline is always handed 16 kHz and never
+# reaches its torchaudio path.
+ASR_SAMPLE_RATE = 16000
+
+# Cap the long edge of OCR page images. Gemma's vision tower pan-and-scans a
+# high-res image into multiple ~896px tiles; a 3000px phone photo balloons the
+# prefill (more tiles → more image tokens → slower). 1536 keeps text legible
+# while roughly halving the tile count on large captures.
+OCR_MAX_EDGE = 1536
+
+
+def _resample_to_16k(audio: np.ndarray, sample_rate: int) -> np.ndarray:
+    """Mono float32 → 16 kHz via linear interpolation (no torchaudio/scipy).
+
+    Callers already pass mono float32 (to_mono_float32); this only changes rate.
+    """
+    audio = np.asarray(audio, dtype=np.float32).reshape(-1)
+    if sample_rate == ASR_SAMPLE_RATE or audio.size == 0:
+        return audio
+    duration = audio.size / sample_rate
+    target_len = max(int(round(duration * ASR_SAMPLE_RATE)), 1)
+    src_t = np.linspace(0.0, duration, audio.size, endpoint=False)
+    dst_t = np.linspace(0.0, duration, target_len, endpoint=False)
+    return np.interp(dst_t, src_t, audio).astype(np.float32)
+
+
+def _fit_image(image):
+    """Downscale so the long edge is at most OCR_MAX_EDGE (keeps aspect ratio)."""
+    from PIL import Image
+
+    width, height = image.size
+    longest = max(width, height)
+    if longest <= OCR_MAX_EDGE:
+        return image
+    scale = OCR_MAX_EDGE / longest
+    return image.resize((max(round(width * scale), 1), max(round(height * scale), 1)), Image.LANCZOS)
+
 
 def _flatten_messages(messages: list[dict]) -> list[dict]:
     """Collapse content-part lists to plain strings for tokenizer-only templates."""
@@ -169,8 +209,9 @@ def transcribe_and_translate(
     asr_kwargs: dict = {"task": "transcribe", **_ANTI_REPEAT}
     if source_lang:
         asr_kwargs["language"] = language_label(source_lang).lower()
+    audio = _resample_to_16k(audio, sample_rate)
     transcript = asr(
-        {"array": audio, "sampling_rate": sample_rate},
+        {"array": audio, "sampling_rate": ASR_SAMPLE_RATE},
         generate_kwargs=asr_kwargs,
     )["text"].strip()
     if not transcript:
@@ -195,8 +236,9 @@ def transcribe_file(audio: np.ndarray, sample_rate: int, source_lang: str | None
     asr_kwargs: dict = {"task": "transcribe", **_ANTI_REPEAT}
     if source_lang:
         asr_kwargs["language"] = language_label(source_lang).lower()
+    audio = _resample_to_16k(audio, sample_rate)
     return asr(
-        {"array": audio, "sampling_rate": sample_rate},
+        {"array": audio, "sampling_rate": ASR_SAMPLE_RATE},
         chunk_length_s=30,
         generate_kwargs=asr_kwargs,
     )["text"].strip()
@@ -272,10 +314,12 @@ def ocr_images(images: list, instructions: str = "") -> str:
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "image": image},
+                    {"type": "image", "image": _fit_image(image)},
                     {"type": "text", "text": user_text},
                 ],
             },
         ]
-        pages.append(_gemma_generate(messages, max_new_tokens=2048))
+        # 1024 covers a dense page; 2048 mostly bought worst-case decode time on
+        # ZeroGPU's per-call bf16 generate (the dominant cost), not more text.
+        pages.append(_gemma_generate(messages, max_new_tokens=1024))
     return "\n\n---\n\n".join(pages)

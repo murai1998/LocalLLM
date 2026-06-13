@@ -68,7 +68,14 @@ the [GitHub repo](https://github.com/murai1998/LocalLLM).
 2. Accept the Gemma license on the model page.
 3. Create a Space → SDK **Gradio** → Hardware **ZeroGPU** → add secret `HF_TOKEN`
    (read token, for the gated Gemma download).
-4. `hf upload <user>/<space> ./showcase . --repo-type space`
+4. **(Recommended, for the Live Interpreter tab)** add Cloudflare TURN secrets
+   `CLOUDFLARE_TURN_KEY_ID` + `CLOUDFLARE_TURN_KEY_API_TOKEN`. WebRTC needs a TURN
+   relay to reach the Space; the app falls back to the free HF relay
+   (turn.fastrtc.org) when these are unset, but that host has intermittent DNS
+   outages (the "Temporary failure in name resolution" popup). Cloudflare's TURN
+   service is free — create a key at Cloudflare dashboard → Calls → TURN. The
+   other three tabs don't use WebRTC and need none of this.
+5. `hf upload <user>/<space> ./showcase . --repo-type space`
 
 ## Running locally (rehearsal)
 
@@ -140,6 +147,12 @@ PyTorch only, so llama.cpp cannot run there; it *can* run in a paid Docker GPU S
   non-WAV uploads (mp3/m4a/ogg). Locally: `winget install Gyan.FFmpeg` (Windows) /
   `brew install ffmpeg` (macOS), then restart the terminal that runs the app. On the
   Space this is handled by `packages.txt`.
+- *Voice transcribe errors with `torchaudio is required to resample`* → fixed: the
+  transformers backend now resamples to 16 kHz with numpy before calling Whisper, so
+  torchaudio is no longer needed. (If you see this on an old build, re-upload.)
+- *Live Interpreter shows "Temporary failure in name resolution"* → the WebRTC TURN
+  relay couldn't be reached. Add Cloudflare TURN secrets (see Hosting step 4) for a
+  reliable relay, or retry — the free HF relay is sometimes briefly down.
 - *Page renders but is completely static/unclickable* → the Python server behind it is
   no longer running (closed terminal, Ctrl+C, or crash after the page loaded). Check the
   terminal that ran `python app.py` is still alive, restart it, then hard-refresh the
