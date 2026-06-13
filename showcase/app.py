@@ -366,7 +366,7 @@ def _ocr_run(file, instructions: str, do_translate: bool, target_lang: str):
 def build_ocr_tab() -> None:
     gr.Markdown(
         f"Vision OCR for images and scanned PDFs (demo limit: {MAX_OCR_PAGES} pages — the "
-        f"[full local version]({GITHUB_URL}) handles whole documents and DOCX/PDF "
+        f"[full local version]({GITHUB_URL}) is about *10x faster* and handles whole documents and DOCX/PDF "
         "translation)."
     )
     file = gr.File(label="Image or PDF", file_types=["image", ".pdf"])
