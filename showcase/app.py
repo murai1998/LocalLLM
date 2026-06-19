@@ -349,10 +349,11 @@ def _ocr_run(file, instructions: str, do_translate: bool, target_lang: str):
 
         images = []
         with fitz.open(path) as doc:
+            page_count = len(doc)  # read before the `with` closes the document
             for page in doc[:MAX_OCR_PAGES]:
                 pix = page.get_pixmap(dpi=150)
                 images.append(Image.frombytes("RGB", (pix.width, pix.height), pix.samples))
-        if len(doc) > MAX_OCR_PAGES:
+        if page_count > MAX_OCR_PAGES:
             gr.Info(f"Demo limit: first {MAX_OCR_PAGES} pages only (full version: unlimited).")
     else:
         images = [Image.open(path).convert("RGB")]
