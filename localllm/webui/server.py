@@ -149,18 +149,20 @@ _agent_graphs: dict[tuple[str, ...], Any] = {}
 _agent_lock = threading.Lock()
 
 
-def _agent_graph(skill_names: tuple[str, ...]):
-    from localllm.agents import build_agent_graph
+def _agent_graph(skill_names: tuple[str, ...], orchestration: str = "single"):
+    from localllm.agents import build_agent_graph, build_multi_agent_graph
     from localllm.agents.skills import resolve_skills
 
+    cache_key = (orchestration, *skill_names)
     with _agent_lock:
-        graph = _agent_graphs.get(skill_names)
+        graph = _agent_graphs.get(cache_key)
         if graph is None:
-            graph = build_agent_graph(
-                autostart_server=False,
-                skills=resolve_skills(list(skill_names)),
+            skills = resolve_skills(list(skill_names))
+            builder = (
+                build_multi_agent_graph if orchestration == "multi" else build_agent_graph
             )
-            _agent_graphs[skill_names] = graph
+            graph = builder(autostart_server=False, skills=skills)
+            _agent_graphs[cache_key] = graph
         return graph
 
 
@@ -227,6 +229,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1)
     mode: Literal["chat", "agent"] = "chat"
+    orchestration: Literal["single", "multi"] = "single"
     skills: list[str] = Field(default_factory=list)
     attachment_ids: list[str] = Field(default_factory=list)
 
@@ -374,10 +377,10 @@ def create_app() -> FastAPI:
     ) -> dict[str, Any]:
         from langchain_core.messages import AIMessage, HumanMessage
 
-        from localllm.agents import invoke_agent
+        from localllm.agents import invoke_agent, invoke_multi_agent
 
         try:
-            graph = _agent_graph(tuple(sorted(set(req.skills))))
+            graph = _agent_graph(tuple(sorted(set(req.skills))), req.orchestration)
         except ValueError as exc:  # unknown skill name
             raise HTTPException(422, str(exc)) from exc
 
@@ -403,7 +406,10 @@ def create_app() -> FastAPI:
         lc_messages.append(HumanMessage(content=content))
 
         try:
-            result = invoke_agent(graph, {"messages": lc_messages})
+            if req.orchestration == "multi":
+                result = invoke_multi_agent(graph, lc_messages)
+            else:
+                result = invoke_agent(graph, {"messages": lc_messages})
         except Exception as exc:
             raise HTTPException(502, f"Agent run failed: {exc}") from exc
 
@@ -411,6 +417,7 @@ def create_app() -> FastAPI:
             "reply": _agent_final_reply(result["messages"]),
             "elapsed_sec": time.perf_counter() - started,
             "mode": "agent",
+            "orchestration": req.orchestration,
             "steps": _agent_trace(result["messages"]),
         }
 

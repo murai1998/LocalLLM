@@ -91,6 +91,7 @@ export interface ChatResponse {
   reply: string;
   elapsed_sec: number;
   mode: "chat" | "agent";
+  orchestration?: "single" | "multi";
   steps: AgentStep[];
 }
 
@@ -115,7 +116,12 @@ export const api = {
 
   chat: (
     messages: { role: string; content: string }[],
-    options?: { mode?: "chat" | "agent"; skills?: string[]; attachmentIds?: string[] },
+    options?: {
+      mode?: "chat" | "agent";
+      orchestration?: "single" | "multi";
+      skills?: string[];
+      attachmentIds?: string[];
+    },
   ) =>
     fetch("/api/chat", {
       method: "POST",
@@ -123,6 +129,7 @@ export const api = {
       body: JSON.stringify({
         messages,
         mode: options?.mode ?? "chat",
+        orchestration: options?.orchestration ?? "single",
         skills: options?.skills ?? [],
         attachment_ids: options?.attachmentIds ?? [],
       }),

@@ -106,6 +106,7 @@ function AgentSteps({ steps }: { steps: AgentStep[] }) {
 
 export function ChatPage({ health }: { health: Health | null }) {
   const [mode, setMode] = useState<Mode>("chat");
+  const [multiAgent, setMultiAgent] = useState(false);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [enabledSkills, setEnabledSkills] = useState<Set<string>>(new Set());
   const [attachments, setAttachments] = useState<(UploadedAttachment & { previewUrl?: string })[]>(
@@ -189,6 +190,7 @@ export function ChatPage({ health }: { health: Health | null }) {
         next.map(({ role, content }) => ({ role, content })),
         {
           mode,
+          orchestration: mode === "agent" && multiAgent ? "multi" : "single",
           skills: mode === "agent" ? [...enabledSkills] : [],
           attachmentIds: sent.map((a) => a.id),
         },
@@ -257,6 +259,33 @@ export function ChatPage({ health }: { health: Health | null }) {
 
       {mode === "agent" && (
         <div className="rounded-xl border border-edge bg-panel px-4 py-3 fade-up">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <button
+                onClick={() => setMultiAgent((v) => !v)}
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer",
+                  multiAgent
+                    ? "bg-accent/20 text-accent"
+                    : "bg-panel-2 text-ink-dim hover:text-ink",
+                )}
+                title="Run a team of role agents (parallel researchers → analyst → critic) instead of one agent"
+              >
+                <span
+                  className={cn(
+                    "size-2 rounded-full",
+                    multiAgent ? "bg-accent" : "bg-ink-faint",
+                  )}
+                />
+                Multi-agent team
+              </button>
+            </div>
+            <span className="text-xs text-ink-faint">
+              {multiAgent
+                ? "Researchers (parallel) → analyst → critic"
+                : "Single tool-using agent"}
+            </span>
+          </div>
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wider text-ink-faint">
               Skills · {enabledSkills.size} of {skills.length} enabled

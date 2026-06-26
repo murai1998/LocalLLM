@@ -187,7 +187,8 @@ Env overrides: prefix `LOCALLLM_`, nested `__` (see `.env.example`).
 | Chat/multimodal | `localllm/backends/openai_client.py`, `localllm/chat/engine.py` |
 | OCR pipeline | `localllm/pipelines/ocr.py`, `localllm/media/pdf.py` |
 | STT pipeline | `localllm/pipelines/stt_batch.py`, `localllm/media/audio.py` |
-| Agent | `localllm/agents/graph.py`, `localllm/agents/tools.py` |
+| Agent (single) | `localllm/agents/graph.py`, `localllm/agents/tools.py` |
+| Agent (multi) | `localllm/agents/multi_agent.py` — hybrid graph: parallel researchers → analyst → critic; reuses the single-agent loop per role via `build_agent_graph(role_preamble=…)`. Same in/out contract as the single agent (`{"messages":[…]}` → `result["messages"]`). Exposed as `localllm-agent --multi` and the Web UI "Multi-agent team" toggle (`ChatRequest.orchestration="multi"`). |
 | Model download | `localllm/model/download.py`, `scripts/download_model.py` |
 | User-facing docs | `README.md` |
 

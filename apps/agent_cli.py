@@ -8,7 +8,13 @@ import json
 
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from localllm.agents import build_agent_graph, invoke_agent, resolve_skills
+from localllm.agents import (
+    build_agent_graph,
+    build_multi_agent_graph,
+    invoke_agent,
+    invoke_multi_agent,
+    resolve_skills,
+)
 from localllm.secrets import apply_hf_token
 
 
@@ -23,12 +29,22 @@ def main() -> None:
     parser.add_argument("--no-server", action="store_true", help="Assume llama-server is already running")
     parser.add_argument("--verbose", action="store_true", help="Show detailed trace")
     parser.add_argument("--skill", action="append", dest="skills", help="Enable specific skill(s)")
+    parser.add_argument(
+        "--multi",
+        action="store_true",
+        help="Multi-agent mode: parallel researchers → analyst → critic",
+    )
 
     args = parser.parse_args()
 
     apply_hf_token()
     skills = resolve_skills(args.skills if args.skills else ["internet-access"])
-    graph = build_agent_graph(autostart_server=not args.no_server, skills=skills)
+    if args.multi:
+        graph = build_multi_agent_graph(autostart_server=not args.no_server, skills=skills)
+        invoke = lambda g, state: invoke_multi_agent(g, state["messages"])  # noqa: E731
+    else:
+        graph = build_agent_graph(autostart_server=not args.no_server, skills=skills)
+        invoke = invoke_agent
 
     if not args.task:
         print("Agent ready. Type /quit to exit.")
@@ -41,17 +57,17 @@ def main() -> None:
                 break
             if not task:
                 continue
-            _run_agent(graph, task, args.verbose)
+            _run_agent(graph, task, args.verbose, invoke=invoke)
         return
 
     # One-shot mode
-    _run_agent(graph, args.task, args.verbose)
+    _run_agent(graph, args.task, args.verbose, invoke=invoke)
 
 
-def _run_agent(graph, task: str, verbose: bool = False):
+def _run_agent(graph, task: str, verbose: bool = False, *, invoke=invoke_agent):
     print(f"\n🔎 Agent thinking about: {task}")
 
-    result = invoke_agent(graph, {"messages": [HumanMessage(content=task)]})
+    result = invoke(graph, {"messages": [HumanMessage(content=task)]})
     messages = result["messages"]
 
     if verbose:

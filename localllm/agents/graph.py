@@ -33,12 +33,19 @@ def _tool_specs(tools) -> str:
     return json.dumps(specs, indent=2)
 
 
-def _build_system_prompt(skills: list[Skill] | None = None) -> str:
+def _build_system_prompt(
+    skills: list[Skill] | None = None,
+    *,
+    role_preamble: str | None = None,
+) -> str:
     tools = tools_for_skills(skills)
     prompt = AGENT_SYSTEM + "\n\nAvailable tools:\n" + _tool_specs(tools)
     skill_block = format_skills_for_prompt(skills or [])
     if skill_block:
         prompt += "\n\n" + skill_block
+    if role_preamble:
+        # The role's mandate goes first so it frames everything that follows.
+        prompt = role_preamble.strip() + "\n\n" + prompt
     return prompt
 
 
@@ -47,10 +54,11 @@ def build_agent_graph(
     *,
     autostart_server: bool = True,
     skills: list[Skill] | None = None,
+    role_preamble: str | None = None,
 ):
     tools = tools_for_skills(skills)
     tool_by_name = {t.name: t for t in tools}
-    system_prompt = _build_system_prompt(skills)
+    system_prompt = _build_system_prompt(skills, role_preamble=role_preamble)
     engine = engine or ChatEngine(
         system_prompt=system_prompt,
         autostart_server=autostart_server,
@@ -133,3 +141,17 @@ def build_agent_graph(
 def invoke_agent(graph, state: AgentState, *, recursion_limit: int = AGENT_RECURSION_LIMIT):
     """Run the agent graph with a safe recursion limit (LangGraph invoke config)."""
     return graph.invoke(state, config={"recursion_limit": recursion_limit})
+
+
+def extract_final_reply(messages: list[BaseMessage]) -> str:
+    """Return the agent's final answer: the last AIMessage that is plain text
+    (no pending tool calls and no raw Gemma tool-call markup)."""
+    for m in reversed(messages):
+        if not isinstance(m, AIMessage) or not m.content:
+            continue
+        if getattr(m, "tool_calls", None):
+            continue
+        if "<|tool_call>" in str(m.content):
+            continue
+        return str(m.content)
+    return ""

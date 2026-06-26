@@ -286,6 +286,52 @@ def test_agent_mode_runs_graph_and_returns_steps(client):
     assert kinds == ["call", "result"]
 
 
+def test_agent_multi_orchestration_runs_team(client):
+    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+    fake_result = {
+        "messages": [
+            HumanMessage(content="research X"),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "researcher_primary:web_search", "args": {"q": "X"}, "id": "c1"}
+                ],
+            ),
+            ToolMessage(content="hits", tool_call_id="c1", name="researcher_primary:web_search"),
+            ToolMessage(
+                content="found",
+                tool_call_id="researcher_primary-summary",
+                name="researcher_primary (contribution)",
+            ),
+            AIMessage(content="The synthesized, critiqued answer."),
+        ]
+    }
+    fake_graph = MagicMock()
+    with (
+        patch("localllm.webui.server._agent_graph", return_value=fake_graph),
+        patch("localllm.agents.invoke_multi_agent", return_value=fake_result) as multi,
+        patch("localllm.agents.invoke_agent") as single,
+    ):
+        res = client.post(
+            "/api/chat",
+            json={
+                "messages": [{"role": "user", "content": "research X"}],
+                "mode": "agent",
+                "orchestration": "multi",
+                "skills": ["internet-access"],
+            },
+        )
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["orchestration"] == "multi"
+    assert payload["reply"].startswith("The synthesized")
+    assert multi.called and not single.called
+    # The merged trace surfaces the role-attributed step.
+    titles = [s["title"] for s in payload["steps"]]
+    assert any("researcher_primary" in t for t in titles)
+
+
 def test_agent_mode_unknown_skill_is_422(client):
     res = client.post(
         "/api/chat",

@@ -11,7 +11,7 @@ Local apps around **Gemma 4 12B** using **llama.cpp** with a **Q6_K** GGUF (~6-b
 | **LLM gateway** | `localllm-serve` | FastAPI service — single shared inference entry point |
 | Terminal chat | `localllm-chat` | REPL with `--image` / `--audio` |
 | Streamlit UI | `localllm-streamlit` | Chat + file uploads |
-| LangGraph agent | `localllm-agent` | Tool-using agent (read/list/write note) |
+| LangGraph agent | `localllm-agent` | Tool-using agent; `--multi` for a parallel researcher → analyst → critic team |
 | OCR bot | `localllm-ocr` | PyMuPDF text for PDFs; Gemma vision for images / scanned pages |
 | Batch STT | `localllm-stt` | Transcribe audio files to `.txt` |
 | Model download | `localllm-download` | Fetch GGUF + mmproj from Hugging Face |
@@ -152,7 +152,16 @@ Opens at `http://localhost:8501`. Attach files in the sidebar; images/audio use 
 ```bash
 localllm-agent --verbose "List files in the project root"
 localllm-agent   # interactive
+localllm-agent --multi "Compare two approaches to X and recommend one"
 ```
+
+Add `--multi` for **multi-agent mode**: a team of role specialists works the
+task as a hybrid graph — two researchers gather facts **in parallel** (each a
+full tool-using agent with a different lens), an analyst synthesises their
+findings, and a critic red-teams that draft and produces the final answer. In
+the Web UI, the same mode is the "Multi-agent team" toggle in the agent panel.
+Concurrency is bounded by `service.max_concurrent_requests` (default 2), so with
+two researchers raise it if you want them fully overlapped.
 
 ### OCR
 

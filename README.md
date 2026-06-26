@@ -24,6 +24,7 @@ adopted at all.
 |---------|--------------|
 | **Multimodal chat** | Text + image + audio understanding through Gemma's vision/audio paths |
 | **Tool-using agent** | LangGraph ReAct-style agent with sandboxed file tools, web search & page fetch, and a pluggable skills system |
+| **Multi-agent teams** | Optional hybrid graph — parallel researcher agents → analyst → critic — that fans research out concurrently and returns a synthesized, critiqued answer |
 | **Document OCR** | Native text extraction for digital PDFs (PyMuPDF) + local vision OCR for scans/images |
 | **Speech-to-text** | Batch transcription with overlap-aware chunking and local merge |
 | **Real-time speech translation** | VAD-segmented audio → ASR → translation → **offline text-to-speech**, streamed incrementally |
@@ -46,6 +47,10 @@ adopted at all.
 - **Pipeline composition over monoliths.** Speech translation is built from small, testable
   stages (VAD chunking → ASR → translate → sentence-queued TTS) that stream partial results,
   rather than one opaque call.
+- **Composable agents, single & multi.** The LangGraph agent ships in two shapes that share one
+  tool loop and invocation contract: a single tool-using agent, and an optional **multi-agent
+  team** — a hybrid graph that fans research out to parallel role specialists, then funnels their
+  findings through an analyst and a critic to a single synthesized answer.
 - **Privacy & safety by default.** Gateway binds to `127.0.0.1`; agent file tools are
   sandboxed to the project directory; the web-fetch tool blocks private/loopback IP ranges
   (SSRF protection); secrets are kept out of version control.
@@ -88,7 +93,8 @@ adopted at all.
 
 `LLM serving & local inference (llama.cpp/GGUF)` · `model quantization` ·
 `OpenAI-compatible API design` · `FastAPI microservice / gateway architecture` ·
-`LangGraph agentic workflows & tool use` · `Retrieval & web-research tooling` ·
+`LangGraph agentic workflows & tool use` · `multi-agent orchestration (parallel fan-out / fan-in)` ·
+`Retrieval & web-research tooling` ·
 `multimodal AI (vision, audio, OCR)` · `speech-to-text & real-time translation pipelines` ·
 `offline TTS` · `async Python & concurrency control` · `Pydantic typed configuration` ·
 `GPU acceleration on CUDA & Apple Metal` · `provider-abstraction for cloud/local portability` ·
@@ -111,12 +117,17 @@ pytest -q                         # unit tests; no GPU or model required
 ```
 
 The **web UI** (`localllm-webui`) is a React single-page app served as a prebuilt static
-bundle — no Node required at runtime. It covers chat (with an agent mode, selectable
-skills, and multi-file attachments), **streaming voice-to-voice translation** (speak
-continuously — silence-aware segmentation feeds a pipelined STT → translate → TTS
-session and the translated voice plays a few seconds behind you), batch transcription,
-document OCR, and a status dashboard. Rebuild after frontend changes with
-`cd webui && npm install && npm run build`. The Streamlit apps remain available.
+bundle — no Node required at runtime (the compiled `webui/dist` is committed). It covers chat
+(with an agent mode, selectable skills, a **Multi-agent team** toggle, and multi-file
+attachments), **streaming voice-to-voice translation** (speak continuously — silence-aware
+segmentation feeds a pipelined STT → translate → TTS session and the translated voice plays a
+few seconds behind you), batch transcription, document OCR, and a status dashboard. Rebuild
+after frontend changes with `cd webui && npm install && npm run build`. The Streamlit apps
+remain available.
+
+The **agent** (`localllm-agent`) runs as a single tool-using agent by default; add `--multi`
+for the multi-agent team (parallel researchers → analyst → critic). The same toggle is exposed
+in the web UI's agent mode.
 
 Benchmark the live pipeline against the ≤ 8 s lag target with
 `localllm-live-bench recording.wav --target en` (add `--fake` to test the plumbing
