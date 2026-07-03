@@ -75,6 +75,9 @@ adopted at all.
 **Agents & orchestration**
 - **LangGraph** + **LangChain Core** for a stateful, tool-calling agent graph with a custom
   tool-call parser and a discoverable "skills" system
+- **Multi-agent graph** (`build_multi_agent_graph`) composes the same tool loop into parallel
+  researcher / analyst / critic roles via `StateGraph` fan-out/fan-in, with a merged tool trace
+  for full observability
 
 **Multimodal & media**
 - **PyMuPDF** (PDF), **python-docx**, **Pillow** (vision), **librosa** / **soundfile** /
