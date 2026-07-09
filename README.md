@@ -27,8 +27,8 @@ adopted at all.
 | **Multi-agent teams** | Optional hybrid graph — parallel researcher agents → analyst → critic — that fans research out concurrently and returns a synthesized, critiqued answer |
 | **Document OCR** | Native text extraction for digital PDFs (PyMuPDF) + local vision OCR for scans/images |
 | **Speech-to-text** | Batch transcription with overlap-aware chunking and local merge |
-| **Real-time speech translation** | VAD-segmented audio → ASR → translation → **offline text-to-speech**, streamed incrementally |
-| **OpenAI-compatible gateway** | One shared inference endpoint that every app (and external client) can call |
+| **Real-time speech translation** | VAD-segmented audio → ASR → translation → **offline text-to-speech**, streamed incrementally over a bidirectional **WebSocket** |
+| **OpenAI-compatible gateway** | One shared inference endpoint that every app (and external client) can call, with **SSE** (`text/event-stream`) token streaming |
 | **Provider abstraction** | Same client SDK targets the local model or any OpenAI-compatible cloud API via config |
 
 ## Architecture decisions
@@ -46,7 +46,9 @@ adopted at all.
   (e.g. 5-bit `Q5_K` quantization) for constrained cards.
 - **Pipeline composition over monoliths.** Speech translation is built from small, testable
   stages (VAD chunking → ASR → translate → sentence-queued TTS) that stream partial results,
-  rather than one opaque call.
+  rather than one opaque call. The live pipeline runs over a **bidirectional WebSocket**
+  (FastAPI `/ws/translate`): microphone audio streams up, partial transcripts, translations,
+  and synthesized speech stream back as they are produced.
 - **Composable agents, single & multi.** The LangGraph agent ships in two shapes that share one
   tool loop and invocation contract: a single tool-using agent, and an optional **multi-agent
   team** — a hybrid graph that fans research out to parallel role specialists, then funnels their
@@ -70,6 +72,10 @@ adopted at all.
 
 **Backend & APIs**
 - **FastAPI** + **Uvicorn** OpenAI-compatible gateway with async concurrency queue
+- **Real-time transports:** **WebSocket** (FastAPI endpoint + React client) for continuous
+  live translation; **SSE** (`text/event-stream`) pass-through for token-streamed chat
+  completions via the gateway; **NDJSON over chunked HTTP** (consumed with
+  `ReadableStream`) for the web UI's streaming chat
 - **httpx** async HTTP client; **Pydantic v2** / **pydantic-settings** for schema & config
 
 **Agents & orchestration**
