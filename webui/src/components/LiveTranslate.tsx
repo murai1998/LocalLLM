@@ -54,7 +54,14 @@ function toInt16(input: Float32Array): ArrayBuffer {
   return out.buffer;
 }
 
+interface EngineSummary {
+  input_audio_sec?: number;
+  output_audio_sec?: number;
+  est_cost_usd?: number;
+}
+
 export function LiveTranslate({
+  engine = "local",
   sourceLang,
   targetLang,
   tone,
@@ -62,6 +69,7 @@ export function LiveTranslate({
   ttsSupported,
   gatewayReady,
 }: {
+  engine?: "local" | "gemini";
   sourceLang: string;
   targetLang: string;
   tone: string;
@@ -75,6 +83,7 @@ export function LiveTranslate({
   const [speaking, setSpeaking] = useState(false);
   const [micPaused, setMicPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<EngineSummary | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const captureCtxRef = useRef<AudioContext | null>(null);
@@ -181,6 +190,7 @@ export function LiveTranslate({
   const start = async () => {
     setError(null);
     setRows([]);
+    setSummary(null);
     setStatus("connecting");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -219,6 +229,7 @@ export function LiveTranslate({
         ws.send(
           JSON.stringify({
             type: "start",
+            engine,
             sample_rate: TARGET_RATE,
             source_lang: sourceLang,
             target_lang: targetLang,
@@ -250,6 +261,7 @@ export function LiveTranslate({
             else setError(data.message);
             break;
           case "done":
+            if (data.est_cost_usd !== undefined) setSummary(data);
             setStatus("idle");
             void teardown();
             break;
@@ -400,6 +412,14 @@ export function LiveTranslate({
             ))}
           </div>
         </Card>
+      )}
+
+      {summary && (
+        <p className="text-xs text-ink-faint">
+          Gemini session: {fmtSeconds(summary.input_audio_sec ?? 0)} in,{" "}
+          {fmtSeconds(summary.output_audio_sec ?? 0)} translated audio out · ≈ $
+          {(summary.est_cost_usd ?? 0).toFixed(4)} at paid-tier rates ($0 on the free tier)
+        </p>
       )}
 
       {error && <ErrorNote message={error} />}

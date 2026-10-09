@@ -43,6 +43,14 @@ Routing rules:
 - `showcase/prompts.py` and `showcase/piper_voices.py` are vendored copies of
   `localllm/pipelines/translate.py` / `localllm/tts/piper.py` tables — tests
   assert they stay in sync; always change both sides.
+- Local models are presets in `localllm/model/presets.py` (`gemma-4-12b` default,
+  `gemma-4-31b`, `qwen3.8-27b`), picked via `model.name`, `LOCALLLM_PROFILE` or
+  `localllm-serve --model`. Only Gemma 4 12B (and E2B/E4B) accept audio; for the
+  others the gateway runs an audio sidecar (12B on :8081) and routes requests with
+  `input_audio` parts there. Don't send audio to the 31B/Qwen directly.
+- Live translation has two engines on `/ws/translate`: local pipeline and Gemini
+  3.5 Live Translate (`localllm/live/gemini.py`, key from `GEMINI_API_KEY` /
+  `.env.local`). Both emit the same event schema.
 - Mermaid renders on GitHub, not on Hugging Face's file viewer.
 - Shell is PowerShell 7 on Windows; `&&` works, but `$env:VAR="x"` must be a
   separate statement (not `cd x && $env:V=1`).

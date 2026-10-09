@@ -1,0 +1,7 @@
+# Gemma 4 31B, Google's 4-bit QAT build (~17.7 GB + 1.2 GB mmproj).
+# No audio input — STT runs on the Gemma 4 12B audio sidecar (~8.4 GB).
+# Peak on a 48 GB Mac ≈ 31 GB of GPU memory with the default 16K context.
+# Use: LOCALLLM_PROFILE=gemma-4-31b localllm-serve   (or: localllm-serve --model gemma-4-31b)
+model:
+  name: gemma-4-31b
+  quantization: qat_q4_0   # qat_q4_0 | q5_k (21.7 GB) | q6_k (25.2 GB, 64 GB machines)

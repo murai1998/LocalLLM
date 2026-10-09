@@ -1,0 +1,7 @@
+# Qwen3.8-27B, Unsloth Dynamic 5-bit (~20.9 GB + 0.9 GB mmproj).
+# No audio input — STT runs on the Gemma 4 12B audio sidecar (~8.4 GB).
+# Peak on a 48 GB Mac ≈ 32 GB of GPU memory with the default 16K context.
+# Use: LOCALLLM_PROFILE=qwen3.8-27b localllm-serve   (or: localllm-serve --model qwen3.8-27b)
+model:
+  name: qwen3.8-27b
+  quantization: ud_q5_k_xl   # ud_q5_k_xl | ud_q4_k_xl (17.6 GB) | ud_q6_k (22.0 GB)

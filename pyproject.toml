@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "localllm"
 version = "0.2.0"
-description = "Local Gemma 4 12B apps via llama.cpp (Q6_K GGUF)"
+description = "Local multimodal LLM apps (Gemma 4 12B/31B, Qwen3.8-27B) via llama.cpp"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
@@ -36,6 +36,10 @@ dev = [
     "mypy>=1.10",
     "bandit>=1.7",
     "pip-audit>=2.7",
+]
+# Remote comparison engine: Gemini 3.5 Live Translate (needs GEMINI_API_KEY).
+gemini = [
+    "google-genai>=2.29",
 ]
 # UI/runtime deps of the HF Spaces showcase (showcase/ has its own
 # requirements.txt for the Space itself; this extra is for local tests).

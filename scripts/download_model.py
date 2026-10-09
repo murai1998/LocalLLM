@@ -1,20 +1,35 @@
 #!/usr/bin/env python3
-"""Download Gemma 4 12B GGUF (quant selectable) and mmproj from Hugging Face."""
+"""Download a model preset's GGUF (quant selectable) and mmproj from Hugging Face."""
 
 from __future__ import annotations
 
 import argparse
 
-from localllm.model.quantization import QUANT_PRESETS, list_quantizations
+from localllm.devices.memory import InsufficientMemoryError
+from localllm.model.presets import get_preset, list_models
 from localllm.secrets import apply_hf_token
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Download Gemma 4 GGUF + mmproj")
+    parser = argparse.ArgumentParser(description="Download model GGUF + mmproj")
+    parser.add_argument(
+        "--model",
+        choices=list_models(),
+        help="Model preset (default: model.name from config)",
+    )
     parser.add_argument(
         "--quant",
-        choices=list_quantizations(),
-        help="Quantization preset (overrides config for this download)",
+        help="Quantization within the preset (default: config, else the preset default)",
+    )
+    parser.add_argument(
+        "--with-audio-sidecar",
+        action="store_true",
+        help="Also fetch the audio sidecar model when the chosen model has no audio input",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Download even if the model (plus audio sidecar) won't fit in this machine's memory",
     )
     parser.add_argument(
         "--voices",
@@ -41,13 +56,35 @@ def main() -> None:
     if not args.skip_model:
         from localllm.model.download import ensure_gguf_assets
 
-        quant = args.quant or settings.model.quantization
-        label = QUANT_PRESETS[quant]["label"]
-        print(f"Quantization: {quant} ({label})")
+        model_cfg = settings.model
+        if args.model and args.model != model_cfg.name:
+            model_cfg = model_cfg.model_copy(update={"name": args.model, "quantization": ""})
+        if args.quant:
+            model_cfg = model_cfg.model_copy(update={"quantization": args.quant})
+        if args.force:
+            model_cfg = model_cfg.model_copy(update={"skip_memory_check": True})
+        settings = settings.model_copy(update={"model": model_cfg})
+        preset = get_preset(model_cfg.name)
+        quant = preset.quant(model_cfg.quantization)
+        print(f"Model: {preset.label}")
+        print(f"Quantization: {model_cfg.quantization or preset.default_quantization} "
+              f"({quant.label}, ~{quant.size_gb:.1f} GB)")
 
-        gguf, mmproj = ensure_gguf_assets(settings, quantization=quant)
+        try:
+            gguf, mmproj = ensure_gguf_assets(
+                settings, quantization=model_cfg.quantization or None
+            )
+        except InsufficientMemoryError as exc:
+            raise SystemExit(f"Not downloading: {exc}") from None
         print(f"GGUF:   {gguf}")
         print(f"mmproj: {mmproj}")
+
+        if args.with_audio_sidecar and settings.audio_sidecar_active():
+            audio = settings.audio_model_settings()
+            print(f"Audio sidecar: {audio.model.preset().label} ({audio.model.quantization})")
+            gguf, mmproj = ensure_gguf_assets(audio)
+            print(f"GGUF:   {gguf}")
+            print(f"mmproj: {mmproj}")
 
     if args.voices is not None:
         from localllm.tts import download_voices

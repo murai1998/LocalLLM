@@ -34,6 +34,7 @@ export function TranslatePage({ meta, health }: { meta: Meta | null; health: Hea
   const [tone, setTone] = useState("professional");
   const [voiceId, setVoiceId] = useState<string | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(true);
+  const [engine, setEngine] = useState<"local" | "gemini">("local");
 
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -220,15 +221,52 @@ export function TranslatePage({ meta, health }: { meta: Meta | null; health: Hea
 
         {mode === "live" && (
           <div className="mt-4">
+            {(meta?.live_engines?.length ?? 0) > 1 && (
+              <div className="mb-4 flex flex-wrap items-center gap-3">
+                <span className="text-xs font-medium uppercase tracking-wide text-ink-faint">
+                  Engine
+                </span>
+                <div className="flex items-center gap-1 rounded-lg bg-panel-2 p-1">
+                  {meta!.live_engines!.map((e) => (
+                    <button
+                      key={e.id}
+                      onClick={() => e.available && setEngine(e.id)}
+                      disabled={!e.available}
+                      title={e.hint}
+                      className={cn(
+                        "rounded-md px-3 py-1 text-sm font-medium transition-colors",
+                        engine === e.id ? "bg-accent/20 text-accent" : "text-ink-dim",
+                        e.available ? "cursor-pointer hover:text-ink" : "cursor-not-allowed opacity-50",
+                      )}
+                    >
+                      {e.id === "local" ? `Local · ${health?.model ?? "gateway"}` : e.label}
+                    </button>
+                  ))}
+                </div>
+                {engine === "gemini" ? (
+                  <span className="text-xs text-ink-faint">
+                    Cloud API — audio leaves this machine. Source language is auto-detected; tone
+                    and voice settings don't apply (Gemini keeps the speaker's voice).
+                  </span>
+                ) : (
+                  !meta!.live_engines!.find((e) => e.id === "gemini")?.available && (
+                    <span className="text-xs text-ink-faint">
+                      Gemini comparison: set GEMINI_API_KEY and restart the web UI.
+                    </span>
+                  )
+                )}
+              </div>
+            )}
             <LiveTranslate
+              engine={engine}
               sourceLang={sourceLang}
               targetLang={effectiveTarget}
               tone={tone}
               voiceId={voiceId ?? voices[0]?.id ?? null}
-              ttsSupported={ttsSupported}
-              gatewayReady={health?.gateway_ready}
+              ttsSupported={engine === "gemini" || ttsSupported}
+              gatewayReady={engine === "gemini" ? true : health?.gateway_ready}
             />
-            {health?.gateway_ready === false && (
+            {engine === "local" && health?.gateway_ready === false && (
               <div className="mt-3">
                 <Badge tone="warn">Gateway offline — start localllm-serve</Badge>
               </div>

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+import httpx
 import numpy as np
 from fastapi import (
     FastAPI,
@@ -35,6 +36,7 @@ from localllm.client.factory import create_llm_client
 from localllm.config import ROOT, get_settings
 from localllm.devices.resolver import detect_platform
 from localllm.live import LiveTranslateSession, StreamingEndpointer
+from localllm.live.gemini import GeminiLiveTranslateSession, GeminiUnavailable, gemini_available
 from localllm.media.attachments import (
     AGENT_ALLOWED,
     CHAT_ALLOWED,
@@ -89,6 +91,19 @@ class StoredUpload:
 
 _uploads: dict[str, StoredUpload] = {}
 _uploads_lock = threading.Lock()
+
+
+def _gateway_health(settings) -> dict[str, Any]:
+    """Model details from the gateway's /health ({} when unreachable or remote)."""
+    if settings.llm.provider != "local":
+        return {}
+    root = settings.llm.base_url.rstrip("/")
+    root = root[:-3] if root.endswith("/v1") else root
+    try:
+        response = httpx.get(f"{root}/health", timeout=2.0)
+        return response.json() if response.status_code == 200 else {}
+    except (httpx.HTTPError, ValueError):
+        return {}
 
 
 def sweep_stale_uploads(
@@ -254,10 +269,14 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     def health() -> dict[str, Any]:
         settings = get_settings()
+        gateway = _gateway_health(settings)
         return {
             "gateway_ready": _client().is_ready(),
             "gateway_url": settings.llm.base_url,
-            "model": settings.llm.model,
+            # The gateway may run a different preset than this process's config.
+            "model": gateway.get("model_label") or gateway.get("model") or settings.llm.model,
+            "audio_model": (gateway.get("audio") or {}).get("model"),
+            "quantization": gateway.get("quantization"),
             "provider": settings.llm.provider,
             "platform": detect_platform(),
             "tts_available": PIPER_AVAILABLE,
@@ -288,6 +307,24 @@ def create_app() -> FastAPI:
                 for lang, options in VOICE_OPTIONS.items()
             },
             "default_target": settings.translate.target_language,
+            "live_engines": [
+                {
+                    "id": "local",
+                    "label": "Local pipeline",
+                    "available": True,
+                    "hint": "On-device STT → translate → Piper TTS",
+                },
+                {
+                    "id": "gemini",
+                    "label": "Gemini 3.5 Live Translate",
+                    "available": gemini_available(),
+                    "hint": (
+                        "Cloud speech-to-speech (paid API, free tier rate-limited)"
+                        if gemini_available()
+                        else "Set GEMINI_API_KEY (see docs/RUNNING.md) and restart the web UI"
+                    ),
+                },
+            ],
         }
 
     @app.get("/api/skills")
@@ -584,6 +621,10 @@ def create_app() -> FastAPI:
             return
 
         sample_rate = int(start.get("sample_rate") or 16000)
+        engine = (start.get("engine") or "local").strip().lower()
+        if engine == "gemini":
+            await _ws_translate_gemini(ws, start, settings, sample_rate)
+            return
         source_lang = (start.get("source_lang") or "").strip() or None
         target_lang = (start.get("target_lang") or settings.translate.target_language).strip()
         tone = (start.get("tone") or "professional").strip()
@@ -625,6 +666,53 @@ def create_app() -> FastAPI:
                         tail = endpointer.flush()
                         if tail is not None:
                             await submit(tail)
+                        await session.finish()
+                        break
+        except WebSocketDisconnect:
+            await session.abort()
+            return
+        await ws.close()
+
+    async def _ws_translate_gemini(
+        ws: WebSocket, start: dict[str, Any], settings, sample_rate: int
+    ) -> None:
+        """Same wire protocol, but audio goes straight to Gemini Live Translate."""
+        if sample_rate != 16000:
+            await ws.send_json({"type": "error", "message": "Gemini needs 16 kHz PCM input."})
+            await ws.close(code=1003)
+            return
+        target_lang = (start.get("target_lang") or settings.translate.target_language).strip()
+        try:
+            session = GeminiLiveTranslateSession(
+                target_lang=target_lang, settings=settings, on_event=ws.send_json
+            )
+            await session.start()
+        except GeminiUnavailable as exc:
+            await ws.send_json({"type": "error", "message": str(exc)})
+            await ws.send_json({"type": "done", "segments": 0})
+            await ws.close()
+            return
+        except Exception as exc:
+            await ws.send_json(
+                {"type": "error", "message": f"Could not connect to Gemini: {exc}"}
+            )
+            await ws.send_json({"type": "done", "segments": 0})
+            await ws.close()
+            return
+
+        try:
+            while True:
+                message = await ws.receive()
+                if message.get("type") == "websocket.disconnect":
+                    raise WebSocketDisconnect(message.get("code") or 1000)
+                if message.get("bytes") is not None:
+                    await session.submit_pcm(message["bytes"])
+                elif message.get("text") is not None:
+                    try:
+                        payload = json.loads(message["text"])
+                    except json.JSONDecodeError:
+                        continue
+                    if payload.get("type") == "stop":
                         await session.finish()
                         break
         except WebSocketDisconnect:

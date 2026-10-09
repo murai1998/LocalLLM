@@ -2,6 +2,9 @@ export interface Health {
   gateway_ready: boolean;
   gateway_url: string;
   model: string;
+  /** Model handling audio input when the main model has none (e.g. Gemma 4 12B sidecar). */
+  audio_model?: string | null;
+  quantization?: string | null;
   provider: string;
   platform: string;
   tts_available: boolean;
@@ -23,6 +26,14 @@ export interface Meta {
   tones: { id: string; label: string; hint: string }[];
   voices: Record<string, { id: string; label: string }[]>;
   default_target: string;
+  live_engines?: LiveEngine[];
+}
+
+export interface LiveEngine {
+  id: "local" | "gemini";
+  label: string;
+  available: boolean;
+  hint: string;
 }
 
 export interface ChunkEvent {

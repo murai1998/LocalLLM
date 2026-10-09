@@ -1,16 +1,23 @@
 from __future__ import annotations
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+if TYPE_CHECKING:
+    from localllm.model.presets import ModelPreset
+
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_PATH = ROOT / "config" / "default.yaml"
+PROFILES_DIR = ROOT / "config" / "profiles"
+# Named overlay from config/profiles/<name>.yaml, e.g. LOCALLLM_PROFILE=gemma-4-31b.
+PROFILE_ENV = "LOCALLLM_PROFILE"
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -18,6 +25,16 @@ def _load_yaml(path: Path) -> dict[str, Any]:
         return {}
     with path.open(encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
+
+
+def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in overlay.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
 
 
 def _yaml_with_env_overrides(raw: dict[str, Any], *, env_prefix: str) -> dict[str, Any]:
@@ -50,13 +67,23 @@ def _yaml_with_env_overrides(raw: dict[str, Any], *, env_prefix: str) -> dict[st
 
 
 class ModelConfig(BaseSettings):
-    gguf_repo: str = "unsloth/gemma-4-12b-it-GGUF"
+    # Model preset id — see localllm/model/presets.py (gemma-4-12b | gemma-4-31b | qwen3.8-27b).
+    name: str = "gemma-4-12b"
+    # Optional overrides; empty means "use the preset's value".
+    gguf_repo: str = ""
     # Pin to a commit hash for supply-chain safety; "main" tracks the latest upload.
     revision: str = "main"
-    quantization: str = "q6_k"
+    quantization: str = ""
     gguf_file: str = ""
-    mmproj_file: str = "mmproj-F16.gguf"
+    mmproj_file: str = ""
     cache_dir: str = "models"
+    # Bypass the "does this model fit in memory" guard (localllm/devices/memory.py).
+    skip_memory_check: bool = False
+
+    def preset(self) -> ModelPreset:
+        from localllm.model.presets import get_preset
+
+        return get_preset(self.name)
 
     def resolved_gguf_file(self) -> str:
         from localllm.model.quantization import resolve_gguf_file
@@ -64,7 +91,22 @@ class ModelConfig(BaseSettings):
         return resolve_gguf_file(
             quantization=self.quantization,
             gguf_file=self.gguf_file,
+            model=self.name,
         )
+
+    def resolved_repo(self) -> str:
+        if self.gguf_repo.strip():
+            return self.gguf_repo.strip()
+        preset = self.preset()
+        quant = None if self.gguf_file.strip() else preset.quant(self.quantization)
+        return (quant.repo if quant and quant.repo else "") or preset.gguf_repo
+
+    def resolved_mmproj_file(self) -> str:
+        if self.mmproj_file.strip():
+            return self.mmproj_file.strip()
+        preset = self.preset()
+        quant = None if self.gguf_file.strip() else preset.quant(self.quantization)
+        return (quant.mmproj_file if quant and quant.mmproj_file else "") or preset.mmproj_file
 
 
 class LlamaServerConfig(BaseSettings):
@@ -153,6 +195,40 @@ class TtsConfig(BaseSettings):
     use_cuda: bool = False
 
 
+class AudioSidecarConfig(BaseSettings):
+    """Second llama-server that handles audio input for models without it.
+
+    Gemma 4 31B and Qwen3.8-27B accept text + images only. With ``mode: auto``
+    the gateway starts a small audio-capable model next to them and routes any
+    request carrying ``input_audio`` parts to it, so STT / live translation keep
+    working unchanged.
+    """
+
+    mode: str = "auto"  # auto | on | off
+    name: str = "gemma-4-12b"
+    quantization: str = "q5_k"
+    host: str = "127.0.0.1"
+    port: int = 8081
+    context_size: int = 8192
+    max_concurrent_requests: int = 1
+
+    @property
+    def base_url(self) -> str:
+        return f"http://{self.host}:{self.port}"
+
+
+class GeminiConfig(BaseSettings):
+    """Remote Gemini Live Translate engine (comparison backend for live translation).
+
+    The API key comes from GEMINI_API_KEY / GOOGLE_API_KEY or ``.env.local``;
+    never put it in YAML.
+    """
+
+    live_translate_model: str = "gemini-3.5-live-translate-preview"
+    # Also speak translated audio when the speaker already uses the target language.
+    echo_target_language: bool = False
+
+
 class LLMConfig(BaseSettings):
     provider: str = "local"
     base_url: str = "http://127.0.0.1:8090/v1"
@@ -196,25 +272,66 @@ class AppSettings(BaseSettings):
     # whisper: WhisperClientConfig = Field(default_factory=WhisperClientConfig)
     translate: TranslateConfig = Field(default_factory=TranslateConfig)
     tts: TtsConfig = Field(default_factory=TtsConfig)
+    audio_sidecar: AudioSidecarConfig = Field(default_factory=AudioSidecarConfig)
+    gemini: GeminiConfig = Field(default_factory=GeminiConfig)
+    profile: str = ""
     config_path: Path = DEFAULT_CONFIG_PATH
 
     @classmethod
-    def from_yaml(cls, path: Path | None = None) -> AppSettings:
+    def from_yaml(cls, path: Path | None = None, *, profile: str | None = None) -> AppSettings:
         path = path or DEFAULT_CONFIG_PATH
-        raw = _yaml_with_env_overrides(_load_yaml(path), env_prefix="LOCALLLM_")
+        raw = _load_yaml(path)
+        profile = (profile if profile is not None else os.environ.get(PROFILE_ENV, "")).strip()
+        if profile:
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", profile):
+                raise ValueError(f"Invalid profile name '{profile}'.")
+            profile_path = PROFILES_DIR / f"{profile}.yaml"
+            if not profile_path.is_file():
+                available = ", ".join(sorted(p.stem for p in PROFILES_DIR.glob("*.yaml")))
+                raise ValueError(f"Unknown profile '{profile}'. Available: {available}")
+            raw = _deep_merge(raw, _load_yaml(profile_path))
+        raw = _yaml_with_env_overrides(raw, env_prefix="LOCALLLM_")
         settings = cls(**raw) if raw else cls()
-        return settings.model_copy(update={"config_path": path})
+        return settings.model_copy(update={"config_path": path, "profile": profile})
 
     @property
     def model_cache_dir(self) -> Path:
         p = Path(self.model.cache_dir)
         return p if p.is_absolute() else ROOT / p
 
+    def model_dir(self) -> Path:
+        return self.model_cache_dir / self.model.preset().subdir
+
     def gguf_path(self) -> Path:
-        return self.model_cache_dir / self.model.resolved_gguf_file()
+        return self.model_dir() / self.model.resolved_gguf_file()
 
     def mmproj_path(self) -> Path:
-        return self.model_cache_dir / self.model.mmproj_file
+        return self.model_dir() / self.model.resolved_mmproj_file()
+
+    def audio_sidecar_active(self) -> bool:
+        """True when a separate audio model must run beside the primary model."""
+        if self.llm.provider != "local":
+            return False
+        mode = self.audio_sidecar.mode.strip().lower()
+        if mode == "on":
+            return True
+        if mode == "off":
+            return False
+        return not self.model.preset().has_audio
+
+    def audio_model_settings(self) -> AppSettings:
+        """Settings view whose ``model`` is the audio sidecar's preset."""
+        side = self.audio_sidecar
+        model = ModelConfig(
+            name=side.name,
+            quantization=side.quantization,
+            revision=self.model.revision,
+            cache_dir=self.model.cache_dir,
+        )
+        server = self.llama_server.model_copy(
+            update={"host": side.host, "port": side.port, "context_size": side.context_size}
+        )
+        return self.model_copy(update={"model": model, "llama_server": server})
 
 
 @lru_cache

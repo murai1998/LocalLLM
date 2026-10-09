@@ -1,9 +1,9 @@
 # LocalLLM — Private, Self-Hosted AI Platform
 
 > A full-featured, **completely free** AI assistant stack that runs a state-of-the-art
-> 12B-parameter LLM **entirely on your own hardware** — an NVIDIA GPU workstation or an
-> Apple Silicon MacBook Pro. No API keys, no per-token billing, no data ever leaving the
-> machine.
+> LLM **entirely on your own hardware** — an NVIDIA GPU workstation or an Apple Silicon
+> MacBook Pro. No API keys, no per-token billing, no data ever leaving the machine (the
+> optional Gemini comparison engine is the one explicit exception — see below).
 
 ## Elevator pitch
 
@@ -27,7 +27,9 @@ adopted at all.
 | **Multi-agent teams** | Optional hybrid graph — parallel researcher agents → analyst → critic — that fans research out concurrently and returns a synthesized, critiqued answer |
 | **Document OCR** | Native text extraction for digital PDFs (PyMuPDF) + local vision OCR for scans/images |
 | **Speech-to-text** | Batch transcription with overlap-aware chunking and local merge |
+| **Model choice** | Gemma 4 12B by default; Gemma 4 31B and Qwen3.8-27B presets for 48 GB Apple Silicon Macs, with an automatic Gemma 4 12B **audio sidecar** so speech features keep working |
 | **Real-time speech translation** | VAD-segmented audio → ASR → translation → **offline text-to-speech**, streamed incrementally over a bidirectional **WebSocket** |
+| **Gemini Live Translate (optional)** | Remote speech-to-speech engine (`gemini-3.5-live-translate-preview`) selectable in the Live tab and in `localllm-live-bench` to compare against the local pipeline. Cloud, opt-in, needs an API key — audio leaves the machine |
 | **OpenAI-compatible gateway** | One shared inference endpoint that every app (and external client) can call, with **SSE** (`text/event-stream`) token streaming |
 | **Provider abstraction** | Same client SDK targets the local model or any OpenAI-compatible cloud API via config |
 
@@ -66,8 +68,15 @@ adopted at all.
   entry points (`pyproject.toml` / setuptools)
 
 **LLM & inference**
-- **Gemma 4 12B** (Google) as a **GGUF** model running on **llama.cpp / `llama-server`**
-- **Quantization** (Q6_K / Q5_K) for GPU-memory efficiency
+- **Gemma 4 12B** (Google) as a **GGUF** model running on **llama.cpp / `llama-server`**;
+  optional **Gemma 4 31B** (QAT 4-bit) and **Qwen3.8-27B** presets selected with
+  `localllm-serve --model`
+- **Quantization** (Q6_K / Q5_K, plus QAT and UD quants for the larger presets) for
+  GPU-memory efficiency
+- **Audio sidecar:** a second `llama-server` running Gemma 4 12B handles audio when the main
+  model is text+image only
+- **Optional remote engine:** Gemini 3.5 Live Translate via the Gemini Live API
+  (`pip install -e ".[gemini]"`) for side-by-side comparison
 - **Hugging Face Hub** for model distribution and gated-model auth
 
 **Backend & APIs**
@@ -141,6 +150,27 @@ in the web UI's agent mode.
 Benchmark the live pipeline against the ≤ 8 s lag target with
 `localllm-live-bench recording.wav --target en` (add `--fake` to test the plumbing
 without a GPU).
+
+**Bigger models.** On a 48 GB Apple Silicon Mac you can serve Gemma 4 31B or Qwen3.8-27B
+instead of the 12B (roughly 13–15 tok/s generation on an M5 Pro):
+
+```bash
+localllm-download --model gemma-4-31b --with-audio-sidecar
+```
+
+```bash
+localllm-serve --model gemma-4-31b
+```
+
+Those two models take text and images only, so the gateway automatically starts a Gemma 4 12B
+audio sidecar and routes audio requests to it. Presets, quants, memory tips and measurements
+are in [docs/RUNNING.md](docs/RUNNING.md#bigger-local-models-model-presets).
+
+**Optional cloud comparison.** The Live translate tab has an *Engine* toggle for Google's
+Gemini 3.5 Live Translate (public preview), and `localllm-live-bench --engine gemini` runs it on
+the same recording as the local pipeline. This is the one feature that is **not** local: it is
+off by default, needs your own `GEMINI_API_KEY`, and sends audio to Google. Setup, key handling
+and pricing are in [docs/RUNNING.md](docs/RUNNING.md#gemini-35-live-translate-optional-remote).
 
 **Online demo:** a reduced-capability showcase for Hugging Face Spaces (ZeroGPU) lives in
 [`showcase/`](showcase/) — see [showcase-plan.md](showcase-plan.md) for the constraints it

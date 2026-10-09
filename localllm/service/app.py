@@ -14,6 +14,7 @@ from localllm.config import AppSettings, get_settings
 from localllm.devices.resolver import detect_platform
 
 _inference_lock: asyncio.Semaphore | None = None
+_audio_lock: asyncio.Semaphore | None = None
 _settings: AppSettings | None = None
 
 
@@ -26,6 +27,20 @@ def _get_settings() -> AppSettings:
 
 def _llama_base_url() -> str:
     return _get_settings().llama_server.base_url.rstrip("/")
+
+
+def _has_audio_input(body: dict[str, Any]) -> bool:
+    for message in body.get("messages") or []:
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, list) and any(
+            isinstance(part, dict) and part.get("type") == "input_audio" for part in content
+        ):
+            return True
+    return False
+
+
+def _audio_manager(settings: AppSettings) -> LlamaServerManager:
+    return LlamaServerManager.shared(settings.audio_model_settings(), role="audio")
 
 
 def _error_response(status_code: int, message: str, *, error_type: str) -> JSONResponse:
@@ -48,21 +63,30 @@ def _check_auth(request: Request, settings: AppSettings) -> JSONResponse | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _inference_lock
+    global _inference_lock, _audio_lock
     settings = _get_settings()
     _inference_lock = asyncio.Semaphore(settings.service.max_concurrent_requests)
+    _audio_lock = asyncio.Semaphore(settings.audio_sidecar.max_concurrent_requests)
+    sidecar = settings.audio_sidecar_active()
 
     if settings.service.autostart_llama_server:
+        if sidecar:
+            # Load both models in parallel; the primary start blocks until ready.
+            _audio_manager(settings).start(wait=False)
         LlamaServerManager.shared(settings).start()
+        if sidecar:
+            _audio_manager(settings).start()
 
     yield
 
     LlamaServerManager.shared(settings).stop()
+    if sidecar:
+        _audio_manager(settings).stop()
 
 
 app = FastAPI(
     title="LocalLLM Gateway",
-    description="OpenAI-compatible gateway over a single llama-server instance.",
+    description="OpenAI-compatible gateway over llama-server (main model + optional audio sidecar).",
     lifespan=lifespan,
 )
 
@@ -72,14 +96,27 @@ async def health() -> dict[str, Any]:
     settings = _get_settings()
     manager = LlamaServerManager.shared(settings)
     inference_ready = manager.is_ready()
+    preset = settings.model.preset()
+    audio: dict[str, Any] = {"model": preset.served_name, "ready": inference_ready}
+    if settings.audio_sidecar_active():
+        audio_settings = settings.audio_model_settings()
+        audio = {
+            "model": audio_settings.model.preset().served_name,
+            "ready": _audio_manager(settings).is_ready(),
+            "inference": audio_settings.llama_server.base_url,
+        }
+    ready = inference_ready and bool(audio["ready"])
     return {
-        "status": "ok" if inference_ready else "starting",
+        "status": "ok" if ready else "starting",
         "provider": settings.llm.provider,
         "platform": detect_platform(),
-        "inference_ready": inference_ready,
+        "inference_ready": ready,
         "gateway": settings.service.base_url,
         "inference": settings.llama_server.base_url,
-        "model": settings.llm.model,
+        "model": preset.served_name,
+        "model_label": preset.label,
+        "quantization": settings.model.quantization or preset.default_quantization,
+        "audio": audio,
     }
 
 
@@ -104,7 +141,7 @@ async def list_models(request: Request) -> Any:
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request) -> Response:
-    global _inference_lock
+    global _inference_lock, _audio_lock
     settings = _get_settings()
 
     auth_error = _check_auth(request, settings)
@@ -137,11 +174,22 @@ async def chat_completions(request: Request) -> Response:
         return _error_response(
             400, "Request body must be a JSON object.", error_type="invalid_request_error"
         )
-    body.setdefault("model", settings.llm.model)
-
     if _inference_lock is None:
         _inference_lock = asyncio.Semaphore(settings.service.max_concurrent_requests)
-    lock = _inference_lock
+    if _audio_lock is None:
+        _audio_lock = asyncio.Semaphore(settings.audio_sidecar.max_concurrent_requests)
+
+    if settings.audio_sidecar_active() and _has_audio_input(body):
+        # The main model has no audio encoder: speech goes to the sidecar, on its
+        # own slot pool so STT never queues behind long text generations.
+        audio_settings = settings.audio_model_settings()
+        base_url = audio_settings.llama_server.base_url.rstrip("/")
+        body["model"] = audio_settings.model.preset().served_name
+        lock = _audio_lock
+    else:
+        base_url = _llama_base_url()
+        body["model"] = settings.model.preset().served_name
+        lock = _inference_lock
 
     try:
         await asyncio.wait_for(lock.acquire(), timeout=settings.service.queue_timeout_sec)
@@ -152,7 +200,7 @@ async def chat_completions(request: Request) -> Response:
             error_type="server_busy",
         )
 
-    url = f"{_llama_base_url()}/v1/chat/completions"
+    url = f"{base_url}/v1/chat/completions"
 
     if body.get("stream"):
         # SSE pass-through: hold the inference slot for the lifetime of the

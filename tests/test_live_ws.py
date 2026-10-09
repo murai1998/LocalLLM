@@ -104,3 +104,19 @@ def test_ws_translate_silence_only_yields_done_with_zero_segments(client, monkey
         ws.send_json({"type": "stop"})
         event = ws.receive_json()
         assert event == {"type": "done", "segments": 0}
+
+
+def test_ws_gemini_engine_without_key_reports_error_and_done(client, monkeypatch):
+    monkeypatch.setattr("localllm.live.gemini.read_gemini_api_key", lambda: None)
+    with client.websocket_connect("/ws/translate") as ws:
+        ws.send_json({"type": "start", "sample_rate": SR, "target_lang": "es", "engine": "gemini"})
+        error = ws.receive_json()
+        done = ws.receive_json()
+    assert error["type"] == "error" and "GEMINI_API_KEY" in error["message"]
+    assert done["type"] == "done"
+
+
+def test_meta_lists_live_engines(client):
+    engines = {e["id"]: e for e in client.get("/api/meta").json()["live_engines"]}
+    assert engines["local"]["available"] is True
+    assert "gemini" in engines

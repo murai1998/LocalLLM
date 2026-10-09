@@ -56,7 +56,7 @@ Real-time microphone STT is **not** implemented (deferred).
   - Must be **build ≥ 9590** (older builds reject the Gemma 4 multimodal projector
     with `unknown projector type: gemma4uv`); on macOS run `brew upgrade llama.cpp`
 - Hugging Face access to Gemma 4 (token in `hf_token.txt` or `HF_TOKEN` env)
-- ~10 GB disk for `gemma-4-12b-it-Q6_K.gguf` + mmproj
+- ~10 GB disk for `gemma-4-12b-it-Q6_K.gguf` + mmproj (bigger presets: see [Bigger local models](#bigger-local-models-model-presets))
 
 ## Setup
 
@@ -233,6 +233,156 @@ See **[docs/INTEGRATION_PLAN.md](docs/INTEGRATION_PLAN.md)** for combining with 
 
 Environment overrides use prefix `LOCALLLM_` with nested `__` (see `.env.example`).
 
+### Bigger local models (model presets)
+
+The default is Gemma 4 12B, but the stack can serve larger models that fit a 48 GB Apple Silicon Mac. Presets live in `localllm/model/presets.py`:
+
+| Preset id | Repo | Default quant (size) | Other quants | Audio input |
+|-----------|------|----------------------|--------------|-------------|
+| `gemma-4-12b` (default) | `unsloth/gemma-4-12b-it-GGUF` | `q6_k` (9.8 GB) | `q5_k` (8.4 GB) | yes |
+| `gemma-4-31b` | `google/gemma-4-31B-it-qat-q4_0-gguf` | `qat_q4_0` (17.7 GB + 1.2 GB mmproj) — Google's quantization-aware-trained 4-bit, near-BF16 quality | `q5_k` 21.7 GB, `q6_k` 25.2 GB (both from `unsloth/gemma-4-31B-it-GGUF`; `q6_k` needs 64 GB or no audio sidecar) | no |
+| `qwen3.8-27b` | `unsloth/Qwen3.8-27B-GGUF` | `ud_q5_k_xl` (20.9 GB + 0.9 GB mmproj) | `ud_q4_k_xl` 17.6 GB, `ud_q6_k` 22.0 GB | no |
+
+Sizes are the GGUF weights; budget a few GB more for the KV cache and compute buffers.
+
+**Download** (files land in `models/<preset>/`; the 12B stays flat in `models/` for backward compatibility):
+
+```bash
+localllm-download --model gemma-4-31b --with-audio-sidecar
+```
+
+Add `--quant q5_k` (or any quant from the table) to pick a non-default file.
+
+**Select a model** — any one of these:
+
+```bash
+localllm-serve --model gemma-4-31b
+```
+
+```bash
+localllm-serve --model gemma-4-31b --quant q5_k
+```
+
+```bash
+LOCALLLM_PROFILE=qwen3.8-27b localllm-serve
+```
+
+`LOCALLLM_PROFILE` loads any `config/profiles/<name>.yaml` overlay; the new ones are `gemma-4-31b.yaml` and `qwen3.8-27b.yaml`. You can also set `model.name` in `config/default.yaml`, or use the env var `LOCALLLM_MODEL__NAME`. The web UI reads the active model from the gateway, so it needs no flag.
+
+**macOS:** install llama.cpp with Homebrew (verified with 0.6.0; older builds may not know the Qwen3.8 architecture).
+
+```bash
+brew install llama.cpp
+```
+
+#### Audio sidecar
+
+Gemma 4 31B and Qwen3.8-27B accept text and images only. When the main model lacks audio, an **audio sidecar** starts a second `llama-server` with Gemma 4 12B `q5_k` on port 8081. The gateway routes any `/v1/chat/completions` request containing `input_audio` parts to the sidecar, on its own slot pool, so STT, batch translate and live voice translation work unchanged with the big models.
+
+```yaml
+audio_sidecar:
+  mode: auto          # auto (only when the main model has no audio) | on | off
+  name: gemma-4-12b
+  quantization: q5_k
+  port: 8081
+```
+
+Routing is per request: a chat or agent turn that carries an audio attachment is answered entirely by the 12B sidecar, and so is `translate.pipeline: unified`. Keep the default `split` pipeline when comparing models, so the big model does the translating and the 12B only transcribes.
+
+`/health` on the gateway reports `model`, `model_label`, `quantization` and `audio` (`{model, ready}`). `llama-server` output goes to `logs/llama-server-primary.log` and `logs/llama-server-audio.log`.
+
+#### Measured on a 48 GB M5 Pro
+
+| Model | Generation speed |
+|-------|------------------|
+| Gemma 4 31B QAT (`qat_q4_0`) | ≈ 14.6 tok/s |
+| Qwen3.8-27B `ud_q5_k_xl` | ≈ 13 tok/s |
+
+With the audio sidecar loaded, total wired memory is ≈ 35–36 GB. Live voice-to-voice on the 31B ran 4.8 s behind the speaker on an 8 s test clip (target ≤ 8 s).
+
+#### Memory guard
+
+`localllm-download` and `localllm-serve` estimate what the chosen model needs (weights + vision projector + KV cache, plus the audio sidecar when it runs) and refuse when that exceeds what this machine can give llama-server:
+
+| Platform | Budget |
+|----------|--------|
+| Apple Silicon | `iogpu.wired_limit_mb` if you raised it, else ~75% of unified memory |
+| NVIDIA | total VRAM (or ~80% of RAM with `n_gpu_layers: 0`) |
+| CPU only | ~80% of RAM |
+
+The error names the best quantization that would fit. On a 48 GB Mac (~38.7 GB budget): Gemma 4 31B `qat_q4_0` needs ~33 GB and `q5_k` ~37 GB, so both pass; `q6_k` needs ~40.5 GB and is refused. Qwen `ud_q5_k_xl` needs ~34 GB. On a 16 GB Mac both big models are refused. To override, pass `--force` to either command, or set `LOCALLLM_MODEL__SKIP_MEMORY_CHECK=true`.
+
+#### Memory tips
+
+- Close heavy apps before loading a 20 GB+ model.
+- Pick a smaller quant (e.g. Qwen `ud_q4_k_xl`).
+- Advanced, optional: macOS caps GPU-wired memory at about 75% of RAM by default. You can raise the cap until the next reboot — your call, and leave ~8 GB for macOS:
+
+```bash
+sudo sysctl iogpu.wired_limit_mb=40960
+```
+
+#### Thinking
+
+Qwen3.8 thinks by default. The project's `generation.enable_thinking` setting is passed through as `chat_template_kwargs`, the same as for Gemma, so the config value controls both.
+
+### Gemini 3.5 Live Translate (optional, remote)
+
+For live translation you can compare the local pipeline against Google's `gemini-3.5-live-translate-preview` (Gemini Live API, public preview). It is streaming speech-to-speech, 70+ languages, auto-detects the source language and keeps the speaker's voice characteristics. It has no source-language, tone or voice options.
+
+> **Privacy:** this engine is remote. Audio leaves the machine and is sent to Google. It is off unless you configure a key and pick it explicitly; the local engine stays the default.
+
+Install the optional dependency:
+
+```bash
+pip install -e ".[gemini]"
+```
+
+#### Getting an API key
+
+1. Open <https://aistudio.google.com/apikey> and sign in with your Google account.
+2. Click **Create API key**. Accept the Terms the first time; a default Google Cloud project is created. Existing Cloud users can import a project via Dashboard → Projects → Import projects.
+3. Recommended: restrict the key ("Restrict to Gemini API only").
+4. The free tier works for this model (rate-limited, $0). For the paid tier, open <https://aistudio.google.com/projects> (or the API keys page), find your project's **Billing Tier** column, click **Set up billing**, and choose or create a billing account (may require a $5 prepay). Paid-tier prompts are not used to improve Google products. Set a budget / billing alert in the Google Cloud console.
+5. Store the key, either in your shell profile (then open a new terminal):
+
+   ```bash
+   echo 'export GEMINI_API_KEY="your-key-here"' >> ~/.zshrc
+   ```
+
+   or as a line `GEMINI_API_KEY=your-key-here` in `.env.local` at the repo root (gitignored). Never commit the key and never paste it into chats or issues. If it leaks, create a new key, switch to it, then disable the old one.
+6. Restart `localllm-webui`.
+
+#### Pricing (paid tier)
+
+From [ai.google.dev/gemini-api/docs/pricing](https://ai.google.dev/gemini-api/docs/pricing): input audio $0.0053/min, output audio $0.0315/min (25 tokens per second of audio). The web UI and the bench print an estimated paid-tier cost per session.
+
+#### Using it
+
+Web UI → **Translate → Live** → **Engine** toggle: "Local · `<model>`" or "Gemini 3.5 Live Translate" (greyed out with a hint until the key is set). Transcript/translation rows and audio playback are the same for both engines.
+
+Under the hood, `localllm/live/gemini.py` (`GeminiLiveTranslateSession`) is selected by `engine: "gemini"` in the `/ws/translate` start message. Config section:
+
+```yaml
+gemini:
+  live_translate_model: gemini-3.5-live-translate-preview
+  echo_target_language: false
+```
+
+#### Side-by-side benchmark
+
+Run both engines on the same recording:
+
+```bash
+localllm-live-bench talk.wav --target es --out local.json
+```
+
+```bash
+localllm-live-bench talk.wav --target es --engine gemini --out gemini.json
+```
+
+Both report engine-neutral metrics: time to first translated audio, tail after the speaker stopped, seconds of translated audio produced and, for Gemini, estimated cost. `--out` saves per-row transcripts and translations for a quality read. Gemini streams continuously, so its per-row "lag" is time since that row opened — compare the engine-neutral metrics instead.
+
 ### Switch to a commercial API
 
 Set env vars or edit `config/default.yaml`:
@@ -280,6 +430,9 @@ models/            # Downloaded GGUF (gitignored)
 | `unknown projector type: gemma4uv` | llama-server too old for the Gemma 4 mmproj — update to build ≥ 9590 (`brew upgrade llama.cpp` on macOS) |
 | Web UI returns 503 / "bundle not found" | `webui/dist` missing — `cd webui && npm install && npm run build` |
 | Stale process holding a stack port | `./scripts/stop_stale_ports.sh` (macOS/Linux) or `.\scripts\stop_stale_ports.ps1` (Windows) |
+| Startup stops with an error about a port held by another model | A `llama-server` from a previous run (different model) still holds the port — run `./scripts/stop_stale_ports.sh`, then start again |
+| Qwen3.8 won't load | Older llama.cpp builds may not know the Qwen3.8 architecture — `brew upgrade llama.cpp` (verified with 0.6.0) |
+| Need to see why a model or the audio sidecar failed | Check `logs/llama-server-primary.log` and `logs/llama-server-audio.log` |
 | Gateway timeout | First model load can take minutes; increase `service.startup_timeout_sec` |
 | Empty assistant reply | Set `enable_thinking: false` (already default) |
 | CUDA OOM on 16 GB | Lower `llama_server.n_gpu_layers` |

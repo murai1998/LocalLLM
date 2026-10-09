@@ -37,3 +37,24 @@ def apply_hf_token() -> str | None:
         os.environ.setdefault("HF_TOKEN", token)
         os.environ.setdefault("HUGGING_FACE_HUB_TOKEN", token)
     return token
+
+GEMINI_KEY_ENV = ("GEMINI_API_KEY", "GOOGLE_API_KEY")
+# Gitignored dotenv file; one `GEMINI_API_KEY=...` line.
+GEMINI_KEY_FILE = ROOT / ".env.local"
+
+
+def read_gemini_api_key() -> str | None:
+    """Resolve the Gemini API key from env or the gitignored ``.env.local``."""
+    for name in GEMINI_KEY_ENV:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    if GEMINI_KEY_FILE.is_file():
+        for line in GEMINI_KEY_FILE.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("export "):
+                line = line[len("export ") :].strip()
+            name, _, value = line.partition("=")
+            if name.strip() in GEMINI_KEY_ENV and value.strip():
+                return value.strip().strip('"').strip("'")
+    return None

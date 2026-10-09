@@ -2,32 +2,23 @@ from __future__ import annotations
 
 from typing import Final
 
+from localllm.model.presets import DEFAULT_MODEL, get_preset
+
+# Gemma 4 12B quant table, kept for callers that predate model presets.
 QUANT_PRESETS: Final[dict[str, dict[str, str]]] = {
-    "q6_k": {
-        "gguf_file": "gemma-4-12b-it-Q6_K.gguf",
-        "label": "6-bit K-quant (default, best quality)",
-    },
-    "q5_k": {
-        "gguf_file": "gemma-4-12b-it-Q5_K_M.gguf",
-        "label": "5-bit K-quant (smaller VRAM, use with Whisper on GPU)",
-    },
+    key: {"gguf_file": q.file, "label": q.label}
+    for key, q in get_preset(DEFAULT_MODEL).quantizations.items()
 }
 
-DEFAULT_QUANTIZATION = "q6_k"
+DEFAULT_QUANTIZATION = get_preset(DEFAULT_MODEL).default_quantization
 
 
-def resolve_gguf_file(*, quantization: str, gguf_file: str = "") -> str:
-    """Resolve GGUF filename from quantization preset or explicit override."""
+def resolve_gguf_file(*, quantization: str, gguf_file: str = "", model: str = "") -> str:
+    """Resolve GGUF filename from the model preset's quantization or an explicit override."""
     if gguf_file.strip():
         return gguf_file.strip()
-    preset = QUANT_PRESETS.get(quantization)
-    if preset is None:
-        raise ValueError(
-            f"Unknown quantization '{quantization}'. "
-            f"Choose from: {', '.join(QUANT_PRESETS)}"
-        )
-    return preset["gguf_file"]
+    return get_preset(model).quant(quantization).file
 
 
-def list_quantizations() -> list[str]:
-    return list(QUANT_PRESETS)
+def list_quantizations(model: str = "") -> list[str]:
+    return list(get_preset(model).quantizations)

@@ -46,6 +46,8 @@ export function StatusPage({ health }: { health: Health | null }) {
               />
               <Row label="Endpoint" value={<code className="text-xs">{health.gateway_url}</code>} />
               <Row label="Model" value={health.model} />
+              {health.quantization && <Row label="Quantization" value={health.quantization} />}
+              {health.audio_model && <Row label="Audio input via" value={health.audio_model} />}
               <Row label="Provider" value={health.provider} />
             </>
           )}

@@ -1,8 +1,11 @@
 model:
-  gguf_repo: unsloth/gemma-4-12b-it-GGUF
-  quantization: q6_k          # q6_k (default) | q5_k (5-bit, lower VRAM)
-  # gguf_file: ""             # optional override; leave empty to use quantization preset
-  mmproj_file: mmproj-F16.gguf
+  # Preset from localllm/model/presets.py: gemma-4-12b | gemma-4-31b | qwen3.8-27b
+  # (or pick one per run: LOCALLLM_PROFILE=gemma-4-31b / localllm-serve --model gemma-4-31b)
+  name: gemma-4-12b
+  quantization: ""            # "" = preset default (12B: q6_k | q5_k)
+  # gguf_repo: ""             # optional overrides; leave empty to use the preset
+  # gguf_file: ""
+  # mmproj_file: ""
   cache_dir: models
 
 service:
@@ -65,3 +68,18 @@ tts:
   engine: piper           # local offline TTS (piper-tts)
   model_dir: models/piper
   use_cuda: false
+
+# Audio input for models that lack it (Gemma 4 31B, Qwen3.8-27B): the gateway
+# starts this second llama-server and routes requests with audio parts to it.
+audio_sidecar:
+  mode: auto              # auto (only when the main model has no audio) | on | off
+  name: gemma-4-12b
+  quantization: q5_k      # 8.4 GB — leaves room for a ~20 GB main model on 48 GB Macs
+  port: 8081
+  context_size: 8192
+
+# Remote comparison engine for live translation (paid API; free tier is rate-limited).
+# API key: GEMINI_API_KEY env var or .env.local — never in this file.
+gemini:
+  live_translate_model: gemini-3.5-live-translate-preview
+  echo_target_language: false

@@ -39,4 +39,5 @@ webui/node_modules/
 .venv310/
 showcase/voices/
 
-
+# llama-server process logs
+logs/
