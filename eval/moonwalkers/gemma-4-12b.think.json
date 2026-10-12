@@ -1,0 +1,28 @@
+{
+  "model": "gemma-4-12b",
+  "quant": "q5_k",
+  "thinking": true,
+  "elapsed_sec": 43.8,
+  "finish_reason": "stop",
+  "usage": {
+    "completion_tokens": 1228,
+    "prompt_tokens": 44,
+    "total_tokens": 1272,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 44,
+    "prompt_ms": 367.937,
+    "prompt_per_token_ms": 8.362204545454546,
+    "prompt_per_second": 119.58568994148455,
+    "predicted_n": 1228,
+    "predicted_ms": 43448.36,
+    "predicted_per_token_ms": 35.41023634881826,
+    "predicted_per_second": 28.240421502675822
+  },
+  "content": "Here is the list of the 12 people who have walked on the surface of the moon, organized by their respective missions:\n\n**Apollo 11 (1969)**\n1. **Neil Armstrong**: He was the first human to ever step onto the lunar surface. He was a naval aviator and a skilled test pilot.\n2. **Buzz Aldrin**: He became the second person to walk on the moon, shortly after Armstrong. He was an aerospace engineer and a naval aviator.\n\n**Apollo 12 (1969)**\n3. **Pete Conrad**: He was the commander of the Apollo 12 mission and the third person to walk on the moon. He was a test pilot with extensive experience in high-altitude flight.\n4. **Alan Bean**: He served as the Lunar Module pilot for Apollo 12 and was the fourth person to walk on the moon. He was a geologist by training.\n\n**Apollo 14 (1971)**\n5. **Alan Shepard**: He was the first American to travel into space (suborbital) and the fifth person to walk on the moon. He was a naval aviator and a test pilot.\n6. **Edgar Mitchell**: He was a psychologist who became the sixth person to walk on the moon. He was the first person to have a PhD in psychology to walk on the moon.\n\n**Apollo 15 (1971)**\n7. **David Scott**: He was a geologist who walked on the moon during the Apollo 15 mission. He was the first person to use the Lunar Roving Vehicle extensively.\n8. **James Irwin**: He was an engineer and test pilot who became the eighth person to walk on the moon. He participated in the Apollo 15 mission.\n\n**Apollo 16 (1972)**\n9. **John Young**: He was a veteran astronaut who commanded the Apollo 16 mission. He was the ninth person to walk on the moon.\n10. **Charles Duke**: He served as the Lunar Module pilot for Apollo 16 and was the tenth person to walk on the moon. He was a geologist and a test pilot.\n\n**Apollo 17 (1972)**\n11. **Eugene Cernan**: He was the commander of the final Apollo mission to land on the moon. He was the last person to walk on the lunar surface.\n12. **Harrison Schmitt**: He was a professional geologist and the only scientist to ever walk on the moon. He accompanied Cernan on the Apollo 17 mission.",
+  "reasoning": "*   Task: List all people who have walked on the moon.\n*   Constraint 1: No internet (rely on internal knowledge).\n*   Constraint 2: Provide 1-2 sentences of background information for each.\n\n    *   Apollo 11 (1969)\n    *   Apollo 12 (1969)\n    *   Apollo 14 (1971)\n    *   Apollo 15 (1971)\n    *   Apollo 16 (1972)\n    *   Apollo 17 (1972)\n\n    *   *Apollo 11:*\n        1.  Neil Armstrong\n        2.  Buzz Aldrin\n    *   *Apollo 12:*\n        3.  Pete Conrad\n        4.  Alan Bean\n    *   *Apollo 14:*\n        5.  Alan Shepard\n        6.  Edgar Mitchell\n    *   *Apollo 15:*\n        7.  David Scott\n        8.  James Irwin\n    *   *Apollo 16:*\n        9.  John Young\n        10. Charles Duke\n    *   *Apollo 17:*\n        11. Eugene Cernan\n        12. Harrison Schmitt\n\n    *   *Neil Armstrong:* First person to walk on the moon (Apollo 11). He was a naval aviator and test pilot.\n    *   *Buzz Aldrin:* Second person to walk on the moon (Apollo 11). He was an aerospace engineer and a naval aviator.\n    *   *Pete Conrad:* Commanded Apollo 12. He was a test pilot and the third person to walk on the moon.\n    *   *Alan Bean:* Lunar Module pilot for Apollo 12. He was a geologist and the fourth person to walk on the moon.\n    *   *Alan Shepard:* The first American in space (suborbital). He walked on the moon during Apollo 14.\n    *   *Edgar Mitchell:* A psychologist and the fifth person to walk on the moon during Apollo 14.\n    *   *David Scott:* A geologist who walked on the moon during Apollo 15. He was the first to use a lunar rover extensively.\n    *   *James Irwin:* The second person to walk on the moon during Apollo 15. He was an engineer and test pilot.\n    *   *John Young:* A veteran astronaut who commanded Apollo 16. He was the ninth person to walk on the moon.\n    *   *Charles Duke:* The lunar module pilot for Apollo 16. He was the tenth person to walk on the moon.\n    *   *Eugene Cernan:* The commander of Apollo 17. He was the last person to walk on the moon.\n    *   *Harrison Schmitt:* A geologist who was the only scientist to walk on the moon. He accompanied Cernan on Apollo 17.\n\n    *   Are there 12? Yes.\n    *   Are they all correct? Yes.\n    *   Is the background info 1-2 sentences? Yes."
+}

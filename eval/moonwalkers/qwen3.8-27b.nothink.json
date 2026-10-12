@@ -1,0 +1,28 @@
+{
+  "model": "qwen3.8-27b",
+  "quant": "default",
+  "thinking": false,
+  "elapsed_sec": 63.0,
+  "finish_reason": "stop",
+  "usage": {
+    "completion_tokens": 800,
+    "prompt_tokens": 40,
+    "total_tokens": 840,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 40,
+    "prompt_ms": 506.362,
+    "prompt_per_token_ms": 12.65905,
+    "prompt_per_second": 78.99486928324005,
+    "predicted_n": 800,
+    "predicted_ms": 62517.143,
+    "predicted_per_token_ms": 78.24423404255319,
+    "predicted_per_second": 12.780494463734533
+  },
+  "content": "Here is the list of the 12 humans who have walked on the surface of the Moon, along with brief background information for each:\n\n1. **Neil Armstrong**  \n   Armstrong was the first human to set foot on the lunar surface during the Apollo 11 mission in July 1969. He was a U.S. Navy aviator, test pilot, and aerospace engineer who later served as a professor of astronautics at the University of Cincinnati.\n\n2. **Buzz Aldrin**  \n   Aldrin became the second person to walk on the Moon, serving as the Lunar Module Pilot for Apollo 11. He is a decorated U.S. Air Force officer and fighter pilot who developed the docking maneuver used during the Apollo missions.\n\n3. **Michael Collins**  \n   Collins was the Command Module Pilot for Apollo 11 and remains the only person to have orbited the Moon alone. He is a U.S. Air Force officer and test pilot who later wrote extensively about the space program and aviation.\n\n4. **Alan Shepard**  \n   Shepard was the first American in space and the fifth person to walk on the Moon during the Apollo 14 mission in 1971. He is a U.S. Navy officer and test pilot who famously hit a golf ball on the lunar surface.\n\n5. **Edgar Mitchell**  \n   Mitchell was the Lunar Module Pilot for Apollo 14 and the sixth person to walk on the Moon. He is a U.S. Navy officer and test pilot who later became deeply interested in parapsychology and consciousness.\n\n6. **James Armistead Lovell Jr.**  \n   Lovell was the Command Module Pilot for Apollo 8 and the Lunar Module Pilot for Apollo 13, where he helped save the crew after a catastrophic oxygen tank explosion. He is a U.S. Navy officer and test pilot who later served as a member of the U.S. House of Representatives.\n\n7. **Fred Haise**  \n   Haise was the Lunar Module Pilot for Apollo 15 and the ninth person to walk on the Moon. He is a U.S. Navy officer and test pilot who later became an entrepreneur and investor in technology and space ventures.\n\n8. **David Scott**  \n   Scott was the Command Module Pilot for Apollo 10 and the Commander for Apollo 15, where he performed the famous \"hammer and feather\" experiment to demonstrate that objects fall at the same rate in a vacuum. He is a U.S. Air Force officer and test pilot who later served as a U.S. Congressman.\n\n9. **Alfred Worden**  \n   Worden was the Command Module Pilot for Apollo 15 and remains the only person to have orbited the Moon three times. He is a U.S. Air Force officer and test pilot who later served as the director of NASA’s Manned Space Flight Center.\n\n10. **John Young**  \n    Young was the only person to walk on the Moon twice, serving as the Commander for both Apollo 16 and the Space Shuttle Challenger mission STS-9. He is a U.S. Navy officer and test pilot who later became an astronaut for the Space Shuttle program.\n\n11. **Charles Duke**  \n    Duke was the Lunar Module Pilot for Apollo 16 and the eleventh person to walk on the Moon. He is a U.S. Air Force officer and test pilot who later served as the administrator of NASA from 1977 to 1981.\n\n12. **Eugene Cernan**  \n    Cernan was the Lunar Module Pilot for Apollo 17 and remains the last person to walk on the Moon, having left the surface in December 1972. He is a U.S. Navy officer and test pilot who later served as a director of the Strategic Defense Initiative Office.",
+  "reasoning": null
+}

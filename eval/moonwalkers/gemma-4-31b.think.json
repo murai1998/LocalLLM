@@ -1,0 +1,28 @@
+{
+  "model": "gemma-4-31b",
+  "quant": "default",
+  "thinking": true,
+  "elapsed_sec": 67.6,
+  "finish_reason": "stop",
+  "usage": {
+    "completion_tokens": 940,
+    "prompt_tokens": 44,
+    "total_tokens": 984,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 44,
+    "prompt_ms": 606.342,
+    "prompt_per_token_ms": 13.7805,
+    "prompt_per_second": 72.56630746344473,
+    "predicted_n": 940,
+    "predicted_ms": 66921.312,
+    "predicted_per_token_ms": 71.26870287539937,
+    "predicted_per_second": 14.031404524764845
+  },
+  "content": "Here are the 12 people who walked on the lunar surface:\n\n**Apollo 11**\n1. **Neil Armstrong**: The first human to step onto the moon's surface. He served as the commander of the Apollo 11 mission.\n2. **Buzz Aldrin**: The second person to walk on the moon. He was the Lunar Module Pilot for the first landing.\n\n**Apollo 12**\n3. **Pete Conrad**: The commander of Apollo 12. He is remembered for his humor and for being the third person to walk on the moon.\n4. **Alan Bean**: The Lunar Module Pilot for Apollo 12. After his NASA career, he became a renowned artist specializing in space scenes.\n\n**Apollo 14**\n5. **Alan Shepard**: The commander of Apollo 14. He was the first American in space (during the Mercury program) before walking on the moon.\n6. **Edgar Mitchell**: The Lunar Module Pilot for Apollo 14. He later became well-known for his interests in consciousness and spirituality.\n\n**Apollo 15**\n7. **David Scott**: The commander of Apollo 15. He led the first mission to utilize the Lunar Roving Vehicle.\n8. **James Irwin**: The Lunar Module Pilot for Apollo 15. He later left NASA to become a minister.\n\n**Apollo 16**\n9. **John Young**: The commander of Apollo 16. He is one of the few astronauts to have flown in both the Apollo program and the Space Shuttle program.\n10. **Charles Duke**: The Lunar Module Pilot for Apollo 16. He was a professional geologist and one of the last humans to walk on the moon.\n\n**Apollo 17**\n11. **Eugene Cernan**: The commander of Apollo 17. He holds the distinction of being the last human to stand on the lunar surface.\n12. **Harrison Schmitt**: The Lunar Module Pilot for Apollo 17. He was the only professional scientist (a geologist) to walk on the moon.",
+  "reasoning": "*   Task: List all people who walked on the moon.\n    *   Constraint: No internet access (rely on internal knowledge).\n    *   Requirement: 1-2 sentence background information for each.\n\n    *   Apollo 11: Neil Armstrong, Buzz Aldrin.\n    *   Apollo 12: Pete Conrad, Alan Bean.\n    *   Apollo 14: Alan Shepard, Edgar Mitchell.\n    *   Apollo 15: David Scott, James Irwin.\n    *   Apollo 16: John Young, Charles Duke.\n    *   Apollo 17: Eugene Cernan, Harrison Schmitt.\n\n    *   *Neil Armstrong:* First person on the moon. Commander of Apollo 11.\n    *   *Buzz Aldrin:* Second person on the moon. Lunar Module Pilot for Apollo 11.\n    *   *Pete Conrad:* Commander of Apollo 12. Known for his humor and for walking on the Ocean of Storms.\n    *   *Alan Bean:* Lunar Module Pilot for Apollo 12. He became a well-known artist after his career.\n    *   *Alan Shepard:* Commander of Apollo 14. He was the first American in space (Mercury program).\n    *   *Edgar Mitchell:* Lunar Module Pilot for Apollo 14. He became interested in consciousness and spirituality later in life.\n    *   *David Scott:* Commander of Apollo 15. He led the first mission to use the Lunar Roving Vehicle.\n    *   *James Irwin:* Lunar Module Pilot for Apollo 15. He later became a minister.\n    *   *John Young:* Commander of Apollo 16. He is one of the few people to have flown in the Space Shuttle program as well.\n    *   *Charles Duke:* Lunar Module Pilot for Apollo 16. He was a professional geologist and NASA astronaut.\n    *   *Eugene Cernan:* Commander of Apollo 17. He was the last person to leave the lunar surface.\n    *   *Harrison Schmitt:* Lunar Module Pilot for Apollo 17. He was the only professional scientist/geologist to walk on the moon.\n\n    *   12 people total.\n    *   Check for accuracy.\n    *   Check constraints (1-2 sentences each)."
+}

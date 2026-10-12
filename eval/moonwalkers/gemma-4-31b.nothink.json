@@ -1,0 +1,28 @@
+{
+  "model": "gemma-4-31b",
+  "quant": "default",
+  "thinking": false,
+  "elapsed_sec": 23.3,
+  "finish_reason": "stop",
+  "usage": {
+    "completion_tokens": 326,
+    "prompt_tokens": 41,
+    "total_tokens": 367,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 41,
+    "prompt_ms": 679.559,
+    "prompt_per_token_ms": 16.57460975609756,
+    "prompt_per_second": 60.33324553129309,
+    "predicted_n": 326,
+    "predicted_ms": 22598.697,
+    "predicted_per_token_ms": 69.5344523076923,
+    "predicted_per_second": 14.381360128860527
+  },
+  "content": "Here are the 12 people who have walked on the lunar surface, listed by mission:\n\n**Apollo 11**\n1. **Neil Armstrong**: The mission commander and the first human to ever step onto the moon.\n2. **Buzz Aldrin**: The Lunar Module pilot who joined Armstrong on the surface shortly after the first step.\n\n**Apollo 12**\n3. **Charles \"Pete\" Conrad**: The mission commander who led the second lunar landing.\n4. **Alan Bean**: The Lunar Module pilot who assisted Conrad in collecting samples.\n\n**Apollo 14**\n5. **Alan Shepard**: The commander who became the first person to hit a golf ball on the moon.\n6. **Edgar Mitchell**: The Lunar Module pilot who is remembered for his spiritual experience while on the surface.\n\n**Apollo 15**\n7. **David Scott**: The commander who led the first mission to use the Lunar Roving Vehicle.\n8. **James Irwin**: The Lunar Module pilot and a geologist who explored the Hadley-Apennine region.\n\n**Apollo 16**\n9. **John Young**: The commander who had previously flown in the first crewed spacecraft (Friendship 7).\n10. **Charles Duke**: The Lunar Module pilot who explored the lunar highlands.\n\n**Apollo 17**\n11. **Eugene Cernan**: The mission commander and the last human to leave the lunar surface.\n12. **Harrison Schmitt**: A professional geologist and the only scientist to ever walk on the moon.",
+  "reasoning": null
+}
